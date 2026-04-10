@@ -3,10 +3,10 @@ import VerifiedMBSE.Behavior.FDIR
 import VerifiedMBSE.VV.Evidence
 
 /-!
-# SubSystemSpec: サブシステムのパラメトリック抽象化
+# SubSystemSpec: Parametric Subsystem Abstraction
 
-StructuralSpec（構造）、BehavioralSpec（振る舞い）、FDIRBundle（FDIR 証明束）を
-統合した SubSystemSpec を定義する。
+Defines `StructuralSpec` (structure), `BehavioralSpec` (behavior),
+`FDIRBundle` (FDIR proof bundle), and `SubSystemSpec` which integrates all three.
 -/
 
 namespace VerifiedMBSE.VV

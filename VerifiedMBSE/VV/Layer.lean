@@ -1,5 +1,5 @@
 /-!
-# V 字モデルの設計レイヤー
+# V-Model Design Layers
 -/
 
 namespace VerifiedMBSE.VV

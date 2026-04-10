@@ -1,10 +1,10 @@
 import VerifiedMBSE.Behavior.StateMachine
 
 /-!
-# LTL 時相演算子の型埋め込み
+# LTL Temporal Operators as Type-Level Propositions
 
-Always (□)、Eventually (◇)、Next (○)、Until (U)、Leads (⇒◇) を
-Reachable 上の命題として定義し、基本代数則を証明する。
+Defines Always (□), Eventually (◇), Next (○), Until (U), and Leads (⇒◇)
+as propositions over `Reachable`, and proves basic algebraic laws.
 -/
 
 namespace VerifiedMBSE.Behavior

@@ -2,10 +2,10 @@ import VerifiedMBSE.Output.Render
 import VerifiedMBSE.Behavior.StateMachine
 
 /-!
-# StateMachine → SysML v2 state def 生成
+# StateMachine → SysML v2 State Definition Generation
 
-StateMachine は型パラメトリックなため、具体的な文字列表現を
-`StateMachineRepr` を介して外部から与える設計。
+Since `StateMachine` is type-parametric, concrete string representations are
+provided externally via `StateMachineRepr`.
 -/
 
 namespace VerifiedMBSE.Output

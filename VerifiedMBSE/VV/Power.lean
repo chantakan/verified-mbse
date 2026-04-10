@@ -1,8 +1,8 @@
 /-!
-# モード別消費電力と電力バジェット
+# Mode-Dependent Power Consumption and Power Budget
 
-ModePowerSpec と PowerBudgetOK₂ を定義し、
-maxPower の和から全モード組み合わせでの予算充足を導出する。
+Defines `ModePowerSpec` and `PowerBudgetOK₂`, and derives budget satisfaction
+across all mode combinations from the sum of per-subsystem max power.
 -/
 
 namespace VerifiedMBSE.VV

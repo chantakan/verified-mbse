@@ -2,11 +2,11 @@ import VerifiedMBSE.Core.Interpretation
 import VerifiedMBSE.Behavior.Temporal
 
 /-!
-# FDIR 仕様と StateMachineComponent
+# FDIR Specification and StateMachineComponent
 
-FDIRSpec（安全性・検知・復旧の3要件構造体）と、
-構造モデル（PartDef）と振る舞いモデル（StateMachine）を統合する
-StateMachineComponent を定義する。
+Defines `FDIRSpec` (a bundle of safety, detection, and recovery requirements)
+and `StateMachineComponent`, which integrates structural (`PartDef`) and
+behavioral (`StateMachine`) models into a single verified component.
 -/
 
 namespace VerifiedMBSE.Behavior

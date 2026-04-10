@@ -1,8 +1,8 @@
 /-!
-# 抽象化レベルと設計パラメータ
+# Abstraction Levels and Design Parameters
 
-AbstractionLevel（n-truncation の MBSE 版）と
-DesignParameter（cubical structure の離散版）を定義する。
+Defines `AbstractionLevel` (MBSE analogue of n-truncation) and
+`DesignParameter` (discrete analogue of cubical structure).
 -/
 
 namespace VerifiedMBSE.Equivalence

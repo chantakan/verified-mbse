@@ -2,9 +2,9 @@ import VerifiedMBSE.Core.KerML
 import VerifiedMBSE.VV.Layer
 
 /-!
-# 出力共通ユーティリティ
+# Output Utilities
 
-indent, typeName, directionKeyword 等の共通ヘルパー関数。
+Common helper functions: `indent`, `typeName`, `directionKeyword`, etc.
 -/
 
 namespace VerifiedMBSE.Output

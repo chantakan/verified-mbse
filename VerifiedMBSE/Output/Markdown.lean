@@ -2,9 +2,9 @@ import VerifiedMBSE.Output.Render
 import VerifiedMBSE.Matrix.Query
 
 /-!
-# V-Matrix → Markdown テーブル生成
+# V-Matrix → Markdown Table Generation
 
-VMatrix を Markdown テーブルとして出力する。
+Renders a `VMatrix` as a Markdown table.
 -/
 
 namespace VerifiedMBSE.Output

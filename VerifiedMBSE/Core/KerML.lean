@@ -1,10 +1,10 @@
 import Mathlib.Order.Basic
 
 /-!
-# KerML Core Layer: 依存型による意味論
+# KerML Core Layer: Dependent Type Semantics
 
-KerML Core 層（Element, Type, Feature, Direction）の構造体と
-方向の共役（Conjugation as involution）を定義する。
+Defines the KerML core layer structures (Element, Type, Feature, Direction) and
+direction conjugation as an involution.
 
 ## References
 - OMG KerML Specification v2.0 Beta (formal/2023-06-03), Part III

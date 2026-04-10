@@ -1,10 +1,10 @@
 import VerifiedMBSE.VV.SubSystemSpec
 
 /-!
-# SubSystemVVBundle: VVRecord バンドルの自動構成
+# SubSystemVVBundle: Automated VVRecord Construction
 
-mkComponentRecord と SubSystemVVBundle を定義し、
-SubSystemSpec から VVRecord を一括構成する。
+Defines `mkComponentRecord` and `SubSystemVVBundle`, which batch-construct
+`VVRecord`s from a `SubSystemSpec`.
 -/
 
 namespace VerifiedMBSE.VV

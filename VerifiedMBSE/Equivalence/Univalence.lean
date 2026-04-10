@@ -1,21 +1,21 @@
 import VerifiedMBSE.Equivalence.ComponentEquiv
 
 /-!
-# Univalence 公理の形式化
+# Formalization of the Univalence Axiom
 
-HoTT の Univalence 公理 `(A ≃ B) ≃ (A = B)` を MBSE 設計空間で形式化する。
+Formalizes the HoTT univalence axiom `(A ≃ B) ≃ (A = B)` in the MBSE design space.
 
-Lean 4 は cubical type theory ではないため、完全な Univalence は内在的に成立しない。
-代わりに **Setoid quotient** を用いて、設計空間 `DesignSpace` を `PartDef / ComponentEquiv`
-として構成する。この商型上では以下が成立する：
+Since Lean 4 is not a cubical type theory, full univalence does not hold intrinsically.
+Instead, we use a **setoid quotient** to construct the design space `DesignSpace`
+as `PartDef / ComponentEquiv`. On this quotient type, the following hold:
 
 - **Sound** (ua): `ComponentEquiv a b → ⟦a⟧ = ⟦b⟧`
 - **Complete** (ua⁻¹): `⟦a⟧ = ⟦b⟧ → ComponentEquiv a b`
 - **Transport**: `⟦a⟧ = ⟦b⟧ → P ⟦a⟧ → P ⟦b⟧`
-- **Path induction**: 商型上の帰納法
-- **Fiber**: 設計空間の点の持ち上げ
+- **Path induction**: Induction on the quotient type
+- **Fiber**: Lifting of design space points
 
-## 参考文献
+## References
 - HoTT Book §2.10 (Universes and the univalence axiom)
 - Setoid model of HoTT (Altenkirch, Boulier, Kaposi, Tabareau 2019)
 -/

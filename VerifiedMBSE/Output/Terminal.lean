@@ -2,9 +2,10 @@ import VerifiedMBSE.Output.Render
 import VerifiedMBSE.Matrix.Query
 
 /-!
-# V-Matrix → ターミナルサマリー生成
+# V-Matrix → Terminal Summary Generation
 
-VMatrix を色付き罫線・信頼度バー付きのサマリーとして出力する。
+Renders a `VMatrix` as a terminal summary with box-drawing characters
+and confidence bars.
 -/
 
 namespace VerifiedMBSE.Output

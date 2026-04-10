@@ -1,10 +1,10 @@
 import VerifiedMBSE.VV.Evidence
 
 /-!
-# レイヤー間の VV 伝播
+# Inter-Layer V&V Propagation
 
-Layer.supports（レイヤー間の包含関係）と
-LayerPropagation（下位 VV → 上位 VV の推移的伝播）を定義する。
+Defines `Layer.supports` (inclusion relation between layers) and
+`LayerPropagation` (transitive propagation from lower-layer V&V to upper-layer V&V).
 -/
 
 namespace VerifiedMBSE.VV

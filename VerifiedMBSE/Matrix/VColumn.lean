@@ -1,9 +1,10 @@
 import VerifiedMBSE.VV.Evidence
 
 /-!
-# VColumn: V 字行列の一列
+# VColumn: A Single Column of the V-Matrix
 
-サブシステム識別子、VColumn 構造体、レイヤーフィルタ、完全性述語を定義する。
+Defines subsystem identifiers, the `VColumn` structure, layer filters,
+and the `Complete` predicate.
 -/
 
 namespace VerifiedMBSE.Matrix

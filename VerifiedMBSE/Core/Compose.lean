@@ -1,10 +1,10 @@
 import VerifiedMBSE.Core.Component
 
 /-!
-# システムの構造的合成
+# Structural System Composition
 
-2つの System を bridge コネクタで結合する `compose` と
-その WellFormed 保存定理を定義する。
+Defines `System.compose`, which joins two systems via bridge connectors,
+and proves that composition preserves `WellFormed`.
 -/
 
 namespace VerifiedMBSE.Core

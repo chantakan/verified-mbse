@@ -4,10 +4,10 @@ import VerifiedMBSE.VV.Evidence
 import VerifiedMBSE.Matrix.VColumn
 
 /-!
-# SysML v2 テキスト記法生成
+# SysML v2 Textual Notation Generation
 
-PartDef, Connector, System, VVRecord, VColumn を
-SysML v2 テキスト記法に変換する関数群。
+Functions to convert `PartDef`, `Connector`, `System`, `VVRecord`, and `VColumn`
+into SysML v2 textual notation.
 -/
 
 namespace VerifiedMBSE.Output

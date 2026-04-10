@@ -2,10 +2,11 @@ import VerifiedMBSE.Core.Port
 import VerifiedMBSE.Core.Specialization
 
 /-!
-# コンポーネント定義
+# Component Definitions
 
-PartDef（パーツ定義）、PortRef（ポート参照）、Connector（接続）、
-System（システム合成）と WellFormed 条件を定義する。
+Defines `PartDef` (part definition with ports and an invariant), `PortRef` (port reference),
+`Connector` (port-to-port connection with compatibility proof),
+`System` (composition of parts and connectors), and `WellFormed` conditions.
 -/
 
 namespace VerifiedMBSE.Core

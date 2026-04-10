@@ -1,9 +1,9 @@
 import VerifiedMBSE.Matrix.VMatrix
 
 /-!
-# V 字行列のクエリと診断
+# V-Matrix Queries and Diagnostics
 
-column, cell, allRecords, summary 等のクエリ関数を定義する。
+Defines query functions: `column`, `cell`, `allRecords`, `summary`, etc.
 -/
 
 namespace VerifiedMBSE.Matrix

@@ -1,10 +1,10 @@
 import VerifiedMBSE.Equivalence.ComponentEquiv
 
 /-!
-# 要件洗練と設計等価性
+# Requirement Refinement and Design Equivalence
 
-DesignEquiv（Univalence-like principle）と
-RequirementRefinement（path space としての要件洗練チェーン）を定義する。
+Defines `DesignEquiv` (Univalence-like principle) and
+`RequirementRefinement` (requirement refinement chains as path spaces).
 -/
 
 namespace VerifiedMBSE.Equivalence

@@ -1,9 +1,10 @@
 import VerifiedMBSE.Matrix.VColumn
 
 /-!
-# VMatrix: V 字行列の全体構造
+# VMatrix: The Complete V-Matrix Structure
 
-VMatrix 構造体、SubSystemComplete、Complete（行列完全性）を定義する。
+Defines the `VMatrix` structure, `SubSystemComplete`,
+and `Complete` (matrix completeness predicate).
 -/
 
 namespace VerifiedMBSE.Matrix

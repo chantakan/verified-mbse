@@ -1,14 +1,15 @@
 import VerifiedMBSE.Core.Component
 
 /-!
-# 状態機械: 依存型による振る舞いモデル
+# State Machine: Dependently Typed Behavioral Model
 
-Transition（不変条件保存を型として埋め込んだ遷移）、StateMachine、
-帰納的命題 Reachable、および安全性定理 Reachable.inv_holds を定義する。
+Defines `Transition` (with invariant preservation embedded as a type-level proof),
+`StateMachine`, the inductive proposition `Reachable`, and the safety theorem
+`Reachable.inv_holds`.
 
-## 核心的な設計判断
-`Transition.preserves` に不変条件保存の証明を型として埋め込むことで、
-不変条件を保存しない遷移は構成不可能（型エラー）となる。
+## Key Design Decision
+Embedding invariant preservation in `Transition.preserves` makes transitions that
+violate the invariant unconstructible (type error).
 -/
 
 namespace VerifiedMBSE.Behavior

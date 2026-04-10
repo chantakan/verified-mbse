@@ -2,11 +2,11 @@ import VerifiedMBSE.Core.Component
 import VerifiedMBSE.Core.Specialization
 
 /-!
-# PartDef の意味論と ConnectorSemantic
+# PartDef Semantics and ConnectorSemantic
 
-Interpretation を用いた PartDef の extent（外延）、PartInstance（依存レコード）、
-PartDef レベルの semanticSpecializes、および ConnectorSemantic の
-圏論的構造（結合性・単位元律）を定義する。
+Defines interpretation-based extent of `PartDef`, `PartInstance` (dependent record),
+`semanticSpecializes` at the `PartDef` level, and categorical laws for
+`ConnectorSemantic` (associativity, identity).
 -/
 
 namespace VerifiedMBSE.Core

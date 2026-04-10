@@ -1,10 +1,10 @@
 import VerifiedMBSE.VV.Layer
 
 /-!
-# ValidationEvidence: Validation の確信度を型として表現する
+# ValidationEvidence: Confidence Levels as Types
 
-確信度の三層（Confidence < Contract < Trusted）、昇格トレース、
-VVRecord（V 字モデルの統一的表現）を定義する。
+Defines a three-tier confidence hierarchy (Confidence < Contract < Trusted),
+promotion traces, and `VVRecord` — the unified representation of a V-model cell.
 -/
 
 namespace VerifiedMBSE.VV

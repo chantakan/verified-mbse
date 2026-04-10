@@ -1,10 +1,11 @@
 import VerifiedMBSE.Core.KerML
 
 /-!
-# 特殊化・型付け・再定義・意味論的解釈
+# Specialization, Feature Typing, Redefinition, and Interpretation
 
-Specialization（前順序）、FeatureTyping（代入補題）、Redefinition（型の細化）、
-Interpretation（モデル理論的意味論）、および健全性定理を定義する。
+Defines `Specialization` (preorder), `FeatureTyping` (substitution lemma),
+`Redefinition` (type refinement), `Interpretation` (model-theoretic semantics),
+and soundness theorems.
 -/
 
 namespace VerifiedMBSE.Core

@@ -1,15 +1,15 @@
 import VerifiedMBSE.Core.Component
 
 /-!
-# HoTT 的コンポーネント等価性
+# HoTT-Inspired Component Equivalence
 
-PortEquiv（ポートインターフェース等価性）、ComponentEquiv（コンポーネント等価性）、
-Substitutable（代替可能性）、および transport（設計空間での移行）を定義する。
+Defines `PortEquiv` (port interface equivalence), `ComponentEquiv` (component equivalence),
+`Substitutable` (substitutability), and `transport_wellFormed` (design-space transport).
 
-## HoTT との対応
-- Equivalence (A ≃ B) → ComponentEquiv
+## Correspondence with HoTT
+- Equivalence (A ≃ B) → `ComponentEquiv`
 - Univalence (A ≃ B → A = B) → Substitutability principle
-- Transport → transport_wellFormed
+- Transport → `transport_wellFormed`
 -/
 
 namespace VerifiedMBSE.Equivalence

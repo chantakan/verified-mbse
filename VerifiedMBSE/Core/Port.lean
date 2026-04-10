@@ -1,10 +1,10 @@
 import VerifiedMBSE.Core.KerML
 
 /-!
-# ポート定義と接続互換性
+# Port Definitions and Connection Compatibility
 
-PortDef（型付き方向付きポート）と Conjugation（共役関係）を定義し、
-ポート間の接続互換性 `compatible` を証明可能な命題として表す。
+Defines `PortDef` (typed, directed port), `Conjugation` (conjugation relation),
+and `compatible` — a decidable proposition for port-to-port connection compatibility.
 -/
 
 namespace VerifiedMBSE.Core
