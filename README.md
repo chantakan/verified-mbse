@@ -32,7 +32,7 @@ If a `VVRecord` exists, the requirement is proven. If a `VMatrix.Complete` theor
 ```lean
 -- lakefile.lean
 require verifiedMbse from git
-  "https://github.com/yourname/verified-mbse.git"
+  "https://github.com/chantakan/verified-mbse.git"
 ```
 
 ### 2. Define components and a state machine
@@ -147,7 +147,8 @@ VerifiedMBSE/
 └── Equivalence/             # HoTT-inspired equivalence (advanced)
     ├── ComponentEquiv.lean  #   PortEquiv, ComponentEquiv, Substitutable
     ├── Refinement.lean      #   DesignEquiv, RequirementRefinement
-    └── Abstraction.lean     #   AbstractionLevel, DesignParameter
+    ├── Abstraction.lean     #   AbstractionLevel, DesignParameter
+    └── Univalence.lean      #   DesignSpace (quotient), ua/ua_inv, Transport, Fiber
 
 Examples/Spacecraft/         # Full satellite case study (4 subsystems, 25 VVRecords)
 ├── EPS.lean                 #   Electric Power Subsystem
@@ -169,6 +170,8 @@ Examples/Spacecraft/         # Full satellite case study (4 subsystems, 25 VVRec
 | `SubSystemSpec` | Structure + behavior + FDIR | One value = complete subsystem verification |
 | `VVRecord` | Machine proof + validation trace | The atomic unit of V&V evidence |
 | `VMatrix.Complete` | No gaps in the V-matrix | **The main theorem** — if it compiles, you're done |
+| `DesignSpace` | `PartDef / ComponentEquiv` quotient | Univalence: equivalent components are equal in design space |
+| `ua` / `ua_inv` | Equiv ↔ equality in `DesignSpace` | HoTT univalence via setoid quotient — sorry-free |
 
 ## Design Principles
 
@@ -180,21 +183,22 @@ Examples/Spacecraft/         # Full satellite case study (4 subsystems, 25 VVRec
 
 ## Documentation
 
+- **[API Reference](https://chantakan.github.io/verified-mbse/)** — doc-gen4 generated (auto-deployed via GitHub Pages)
 - **[Architecture Guide](docs/Architecture.md)** — Type-theoretic foundations, design decisions, proof patterns
 - **[Tutorial: Adding a New Subsystem](docs/Tutorial.md)** — Step-by-step walkthrough
 
 ## Requirements
 
-- Lean 4 (v4.29.0+)
+- Lean 4 (v4.30.0-rc1)
 - Mathlib
 
 ## Statistics
 
 | | Files | Lines | sorry |
 |---|---|---|---|
-| Library | 26 | 2,363 | 0 |
-| Examples | 5 | 2,435 | 0 |
-| **Total** | **31** | **4,798** | **0** |
+| Library | 28 | 2,582 | 0 |
+| Examples | 6 | 2,440 | 0 |
+| **Total** | **34** | **5,022** | **0** |
 
 ## License
 

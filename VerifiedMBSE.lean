@@ -35,3 +35,4 @@ import VerifiedMBSE.Output.Terminal
 import VerifiedMBSE.Equivalence.ComponentEquiv
 import VerifiedMBSE.Equivalence.Refinement
 import VerifiedMBSE.Equivalence.Abstraction
+import VerifiedMBSE.Equivalence.Univalence
