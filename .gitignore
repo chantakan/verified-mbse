@@ -1,0 +1,12 @@
+/.lake/
+/build/
+/lake-packages/
+/.cache/
+*.olean
+*.ilean
+*.trace
+*.hash
+*.c
+*.o
+*.depend
+/docbuild/.lake/

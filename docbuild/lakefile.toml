@@ -1,0 +1,14 @@
+name = "docbuild"
+reservoir = false
+version = "0.1.0"
+packagesDir = "../.lake/packages"
+
+[[require]]
+name = "VerifiedMBSE"
+path = "../"
+
+[[require]]
+scope = "leanprover"
+name = "doc-gen4"
+# v4.30.0-rc1 に対応するブランチ。stable リリースに上げたら "v4.x" に変更
+rev = "main"

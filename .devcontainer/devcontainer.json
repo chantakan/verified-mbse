@@ -1,0 +1,39 @@
+{
+  "name": "Dependent MBSE (Lean 4 + Mathlib)",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "hostRequirements": {
+    "memory": "7gb",
+    "cpus": 4
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": false,
+      "installOhMyZsh": false,
+      "upgradePackages": false,
+      "username": "vscode",
+      "userUid": "automatic",
+      "userGid": "automatic"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "leanprover.lean4"
+      ],
+      "settings": {
+        "lean4.serverEnv": {
+          "PATH": "${containerEnv:PATH}"
+        },
+        "editor.unicodeHighlight.ambiguousCharacters": false,
+        "files.exclude": {
+          "**/.lake": true,
+          "**/build": true
+        }
+      }
+    }
+  },
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "remoteUser": "vscode"
+}
