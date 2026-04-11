@@ -12,42 +12,42 @@ namespace VerifiedMBSE.Equivalence
 open VerifiedMBSE.Core
 
 -- ============================================================
--- §1  DesignEquiv（設計等価性）
+-- §1  DesignEquiv (Design Equivalence)
 -- ============================================================
 
-/-- DesignEquiv: 設計空間における等価性。
-    ComponentEquiv の意味論的ラッパー。 -/
+/-- DesignEquiv: equivalence in the design space.
+    Semantic wrapper around ComponentEquiv. -/
 def DesignEquiv (a b : PartDef) : Prop :=
   ComponentEquiv a b
 
-/-- Univalence-like principle: 設計等価なら不変条件を保存。 -/
+/-- Univalence-like principle: design equivalence preserves invariants. -/
 theorem designEquiv_preserves_invariant
     {a b : PartDef} (h : DesignEquiv a b) :
     a.invariant ↔ b.invariant :=
   h.invariantIff
 
-/-- 設計等価なら代替可能。 -/
+/-- Design equivalence implies substitutability. -/
 theorem designEquiv_preserves_substitutable
     {a b : PartDef} (h : DesignEquiv a b) :
     Substitutable a b :=
   ComponentEquiv.toSubstitutable h
 
 -- ============================================================
--- §2  RequirementRefinement（要件洗練チェーン）
+-- §2  RequirementRefinement (Requirement Refinement Chain)
 -- ============================================================
 
-/-- RequirementRefinement: 要件の洗練関係。
-    HoTT の path space の MBSE 版。
-    洗練: refined → original（より強い要件が元の要件を含意）。 -/
+/-- RequirementRefinement: requirement refinement relation.
+    MBSE version of HoTT path spaces.
+    Refinement: refined → original (a stronger requirement implies the original). -/
 structure RequirementRefinement where
-  /-- 元の要件 -/
+  /-- Original requirement -/
   original : Prop
-  /-- 洗練された要件 -/
+  /-- Refined requirement -/
   refined  : Prop
-  /-- 洗練関係 -/
+  /-- Refinement relation -/
   refines  : refined → original
 
-/-- 洗練チェーンの合成（path composition）。 -/
+/-- Composition of refinement chains (path composition). -/
 def RequirementRefinement.compose
     (r₁₂ : RequirementRefinement) (r₂₃ : RequirementRefinement)
     (h : r₁₂.refined = r₂₃.original) :
@@ -56,27 +56,27 @@ def RequirementRefinement.compose
     refined  := r₂₃.refined
     refines  := fun hr₃ => r₁₂.refines (h ▸ r₂₃.refines hr₃) }
 
-/-- 恒等洗練（reflexivity path）。 -/
+/-- Identity refinement (reflexivity path). -/
 def RequirementRefinement.id (P : Prop) : RequirementRefinement :=
   { original := P, refined := P, refines := fun h => h }
 
 -- ============================================================
--- §3  具体例
+-- §3  Examples
 -- ============================================================
 
-/-- 電圧要件の洗練: v ≤ 500 ⊑ v ≤ 1000 -/
+/-- Voltage requirement refinement: v ≤ 500 ⊑ v ≤ 1000 -/
 def voltage_refinement : RequirementRefinement :=
   { original := (150 : Nat) ≤ 1000
     refined  := (150 : Nat) ≤ 500
     refines  := fun h => Nat.le_trans h (by omega) }
 
-/-- さらに厳しい洗練: v ≤ 200 ⊑ v ≤ 500 -/
+/-- Stricter refinement: v ≤ 200 ⊑ v ≤ 500 -/
 def voltage_refinement₂ : RequirementRefinement :=
   { original := (150 : Nat) ≤ 500
     refined  := (150 : Nat) ≤ 200
     refines  := fun h => Nat.le_trans h (by omega) }
 
-/-- 洗練の合成: v ≤ 200 ⊑ v ≤ 1000 -/
+/-- Composed refinement: v ≤ 200 ⊑ v ≤ 1000 -/
 def voltage_refinement_composed : RequirementRefinement :=
   RequirementRefinement.compose voltage_refinement voltage_refinement₂ rfl
 

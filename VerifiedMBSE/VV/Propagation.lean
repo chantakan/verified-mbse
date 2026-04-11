@@ -10,23 +10,23 @@ Defines `Layer.supports` (inclusion relation between layers) and
 namespace VerifiedMBSE.VV
 
 -- ============================================================
--- §1  レイヤーの包含関係
+-- §1  Layer Inclusion Relation
 -- ============================================================
 
-/-- レイヤーの包含関係：下位レイヤーが上位レイヤーを「支える」。 -/
+/-- Layer inclusion: a lower layer 'supports' an upper layer. -/
 def Layer.supports : Layer → Layer → Prop
   | .component, .subsystem => True
   | .subsystem, .system    => True
   | .component, .system    => True
   | _,          _          => False
 
-/-- supports は推移的。 -/
+/-- supports is transitive. -/
 theorem Layer.supports_trans {l1 l2 l3 : Layer}
     (h12 : Layer.supports l1 l2) (h23 : Layer.supports l2 l3) :
     Layer.supports l1 l3 := by
   cases l1 <;> cases l2 <;> cases l3 <;> simp [Layer.supports] at *
 
-/-- supports は反射的でない。 -/
+/-- supports is irreflexive. -/
 theorem Layer.supports_irrefl (l : Layer) : ¬ Layer.supports l l := by
   cases l <;> simp [Layer.supports]
 
@@ -34,7 +34,7 @@ theorem Layer.supports_irrefl (l : Layer) : ¬ Layer.supports l l := by
 -- §2  LayerPropagation
 -- ============================================================
 
-/-- LayerPropagation: 下位レイヤーの VV が成立すれば上位レイヤーの VV も成立する関係。 -/
+/-- LayerPropagation: relation where lower-layer V&V implies upper-layer V&V. -/
 structure LayerPropagation where
   lower_layer : Layer
   upper_layer : Layer
@@ -43,7 +43,7 @@ structure LayerPropagation where
   upper_prop  : Prop
   propagates  : lower_prop → upper_prop
 
-/-- 推移的伝播の合成。 -/
+/-- Composition of transitive propagation. -/
 def LayerPropagation.compose
     (lp1 : LayerPropagation) (lp2 : LayerPropagation)
     (hchain : lp1.upper_prop → lp2.lower_prop)
@@ -57,10 +57,10 @@ def LayerPropagation.compose
     propagates  := fun h => lp2.propagates (hchain (lp1.propagates h)) }
 
 -- ============================================================
--- §3  確信度伝播
+-- §3  Confidence Propagation
 -- ============================================================
 
-/-- 全 VVRecord の validation が trusted なら currentLevel = 1.0。 -/
+/-- If all VVRecord validations are trusted, then currentLevel = 1.0. -/
 theorem trusted_gives_full_confidence (r : VVRecord)
     (h : r.validation.current = .trusted r.verified) :
     r.validation.currentLevel = 1.0 := by

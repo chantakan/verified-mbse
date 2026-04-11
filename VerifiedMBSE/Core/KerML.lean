@@ -14,64 +14,64 @@ direction conjugation as an involution.
 namespace VerifiedMBSE.Core
 
 -- ============================================================
--- §1  基本構造体
+-- §1  Basic Structures
 -- ============================================================
 
-/-- KerML Element: 全モデル要素の根。 -/
+/-- KerML Element: root of all model elements. -/
 structure Element where
   name : Option String := none
   deriving Repr, BEq
 
-/-- KerML Type: フィーチャーを持ち得る分類子。
-    意味論的には、インスタンスの集合（extent）を表す。 -/
+/-- KerML Type: classifier that may own features.
+    Semantically represents a set of instances (extent). -/
 structure KerMLType extends Element where
-  /-- 抽象型（直接インスタンス化不可）かどうか -/
+  /-- Whether it is abstract (cannot be directly instantiated) -/
   isAbstract : Bool := false
   deriving Repr
 
-/-- Feature: 型の特徴（名前付き・多重度付きスロット）。
-    依存型理論では Σ(x:A).B(x) の射影に対応する。 -/
+/-- Feature: characteristic of a type (named, multiplicity-bearing slot).
+    In dependent type theory, corresponds to a projection of Σ(x:A).B(x). -/
 structure Feature extends Element where
-  /-- 多重度下限 -/
+  /-- Multiplicity lower bound -/
   lower : Nat := 1
-  /-- 多重度上限（0 = 無限） -/
+  /-- Multiplicity upper bound (0 = unbounded) -/
   upper : Nat := 1
   deriving Repr
 
 -- ============================================================
--- §2  方向と共役
+-- §2  Direction and Conjugation
 -- ============================================================
 
-/-- フィーチャーの方向（KerML spec §8.4.4）。
-    線形論理の極性に対応：in = 負位置、out = 正位置。 -/
+/-- Feature Direction (KerML spec §8.4.4).
+    Corresponds to polarity in linear logic: in = negative, out = positive. -/
 inductive Direction where
-  | in_   -- 入力（外部→内部）
-  | out   -- 出力（内部→外部）
-  | inout -- 双方向（自己双対）
+  | in_   -- Input (external → internal)
+  | out   -- Output (internal → external)
+  | inout -- Bidirectional (self-dual)
   deriving Repr, BEq
 
-/-- Conjugation による方向反転。線形論理の否定 A⊥ に対応。 -/
+/-- Direction inversion via conjugation. Corresponds to negation A⊥ in linear logic. -/
 def Direction.conj : Direction → Direction
   | .in_   => .out
   | .out   => .in_
   | .inout => .inout
 
-/-- 方向の Conjugation は対合（involution）：conj(conj(d)) = d -/
+/-- Direction conjugation is an involution: conj(conj(d)) = d -/
 theorem Direction.conj_involution (d : Direction) :
     d.conj.conj = d := by
   cases d <;> rfl
 
-/-- 方向付きフィーチャー：ポート定義の基本単位。 -/
+/-- Directed feature: the basic unit of port definitions. -/
 structure DirectedFeature extends Feature where
   direction : Direction
   deriving Repr
 
-/-- DirectedFeature の Conjugation：方向のみ反転し本体は保持。 -/
+/-- DirectedFeature conjugation: inverts only the direction, preserving the body. -/
 def DirectedFeature.conj (f : DirectedFeature) : DirectedFeature where
   toFeature := f.toFeature
   direction := f.direction.conj
 
-/-- DirectedFeature の Conjugation も対合。 -/
+/-- DirectedFeature conjugation is also an involution. -/
 theorem DirectedFeature.conj_involution (f : DirectedFeature) :
     f.conj.conj = f := by
   simp [DirectedFeature.conj, Direction.conj_involution]

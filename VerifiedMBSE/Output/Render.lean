@@ -11,39 +11,39 @@ namespace VerifiedMBSE.Output
 
 open VerifiedMBSE.Core
 
-/-- インデントを生成する。 -/
+/-- Generate indentation. -/
 def indent (level : Nat) : String :=
   String.ofList (List.replicate (level * 4) ' ')
 
-/-- KerMLType の名前を取得する。 -/
+/-- Get a KerMLType name. -/
 def typeName (t : KerMLType) : String :=
   match t.name with | some n => n | none => "Anonymous"
 
-/-- 共役型かどうか（名前が "~" で始まるか）。 -/
+/-- Whether it is a conjugated type (name starts with "~"). -/
 def isConjugated (t : KerMLType) : Bool :=
   match t.name with | some n => n.startsWith "~" | none => false
 
-/-- 共役型から元の型名を取得する。 -/
+/-- Get the original type name from a conjugated type. -/
 def baseTypeName (t : KerMLType) : String :=
   match t.name with
   | some n => if n.startsWith "~" then (n.drop 1).toString else n
   | none   => "Anonymous"
 
-/-- Direction を SysML v2 キーワードに変換。 -/
+/-- Convert a Direction to a SysML v2 keyword. -/
 def directionKeyword (d : Direction) : String :=
   match d with | .in_ => "in" | .out => "out" | .inout => "inout"
 
-/-- Multiplicity を SysML v2 記法に変換。 -/
+/-- Convert Multiplicity to SysML v2 notation. -/
 def multiplicityStr (lower upper : Nat) : String :=
   if lower == upper then s!"[{lower}]"
   else if upper == 0 then s!"[{lower}..*]"
   else s!"[{lower}..{upper}]"
 
-/-- Layer を文字列に変換。 -/
+/-- Convert a Layer to a string. -/
 def layerToString (l : VerifiedMBSE.VV.Layer) : String :=
   match l with | .system => "system" | .subsystem => "subsystem" | .component => "component"
 
-/-- Layer を略記に変換。 -/
+/-- Convert a Layer to an abbreviation. -/
 def layerToAbbr (l : VerifiedMBSE.VV.Layer) : String :=
   match l with | .system => "SYS" | .subsystem => "SUB" | .component => "CMP"
 

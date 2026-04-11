@@ -18,48 +18,48 @@ namespace VerifiedMBSE.Behavior
 -- §1  Transition
 -- ============================================================
 
-/-- Transition: 制御状態 S とデータ型 D の上で定義される遷移。
-    `preserves` フィールドにより、不変条件保存が型レベルで保証される。 -/
+/-- Transition: transition defined over control state S and data type D.
+    The `preserves` field guarantees invariant preservation at the type level. -/
 structure Transition (S : Type) (D : Type) (inv : S → D → Prop) where
-  /-- 遷移元の制御状態 -/
+  /-- Source control state -/
   source   : S
-  /-- 遷移先の制御状態 -/
+  /-- Target control state -/
   target   : S
-  /-- ガード条件 -/
+  /-- Guard condition -/
   guard    : D → Prop
-  /-- エフェクト（データ変換） -/
+  /-- Effect (data transformation) -/
   effect   : D → D
-  /-- 不変条件保存の型レベル契約 -/
+  /-- Type-level contract for invariant preservation -/
   preserves : ∀ d : D, guard d → inv source d → inv target (effect d)
 
 -- ============================================================
 -- §2  StateMachine
 -- ============================================================
 
-/-- StateMachine: 初期状態と遷移リストから構成される状態機械。 -/
+/-- StateMachine: state machine consisting of an initial state and a list of transitions. -/
 structure StateMachine (S : Type) (D : Type) (inv : S → D → Prop) where
-  /-- 初期制御状態 -/
+  /-- Initial control state -/
   initialState : S
-  /-- 遷移のリスト -/
+  /-- List of transitions -/
   transitions  : List (Transition S D inv)
 
-/-- StateMachine の整合性条件：初期状態で不変条件を満たすデータが存在する。 -/
+/-- Well-formedness of StateMachine: data satisfying the invariant exists in the initial state. -/
 def StateMachine.WellFormed {S D : Type} {inv : S → D → Prop}
     (sm : StateMachine S D inv) : Prop :=
   ∃ d₀ : D, inv sm.initialState d₀
 
 -- ============================================================
--- §3  Reachable（到達可能性）
+-- §3  Reachable (Reachability)
 -- ============================================================
 
-/-- Reachable: 状態機械の到達可能な (制御状態, データ値) の帰納的命題。
-    制御状態とデータ値を同時追跡することで inv_holds の帰納法を可能にする。 -/
+/-- Reachable: inductive proposition for reachable (control state, data value) pairs.
+    Tracking both enables induction for inv_holds. -/
 inductive Reachable {S D : Type} {inv : S → D → Prop}
     (sm : StateMachine S D inv) : S → D → Prop where
-  /-- 初期状態は到達可能 -/
+  /-- The initial state is reachable -/
   | init : ∀ (d₀ : D), inv sm.initialState d₀ →
            Reachable sm sm.initialState d₀
-  /-- 遷移により次の状態に到達可能 -/
+  /-- The next state is reachable via a transition -/
   | step : ∀ {s : S} {d : D} (t : Transition S D inv),
            Reachable sm s d →
            t ∈ sm.transitions →
@@ -68,11 +68,11 @@ inductive Reachable {S D : Type} {inv : S → D → Prop}
            Reachable sm t.target (t.effect d)
 
 -- ============================================================
--- §4  安全性定理
+-- §4  Safety Theorem
 -- ============================================================
 
-/-- 安全性定理：到達可能なペアは必ず不変条件を満たす。
-    Transition.preserves が型に埋め込まれているため帰納法で直接証明できる。 -/
+/-- Safety theorem: all reachable pairs satisfy the invariant.
+    Directly provable by induction since Transition.preserves is embedded in the type. -/
 theorem Reachable.inv_holds {S D : Type} {inv : S → D → Prop}
     {sm : StateMachine S D inv} {s : S} {d : D}
     (h : Reachable sm s d) : inv s d := by
@@ -83,7 +83,7 @@ theorem Reachable.inv_holds {S D : Type} {inv : S → D → Prop}
       rw [← hsrc] at ih
       exact t.preserves _ hguard ih
 
-/-- WellFormed な状態機械の初期状態は不変条件を満たすデータを持つ。 -/
+/-- The initial state of a WellFormed state machine has data satisfying the invariant. -/
 theorem StateMachine.initial_inv_holds {S D : Type} {inv : S → D → Prop}
     {sm : StateMachine S D inv}
     (hwf : sm.WellFormed) :

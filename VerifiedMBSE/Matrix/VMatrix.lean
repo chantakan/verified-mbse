@@ -13,37 +13,37 @@ namespace VerifiedMBSE.Matrix
 -- §1  VMatrix
 -- ============================================================
 
-/-- VMatrix: V 字モデルの2次元行列。 -/
+/-- VMatrix: two-dimensional V-model matrix. -/
 structure VMatrix where
   columns : List VColumn
 
 -- ============================================================
--- §2  完全性述語
+-- §2  Completeness Predicate
 -- ============================================================
 
-/-- サブシステム完全性: 指定された全サブシステムにカラムが存在する。 -/
+/-- Subsystem completeness: a column exists for every specified subsystem. -/
 def VMatrix.SubSystemComplete (m : VMatrix) (subsystems : List String) : Prop :=
   ∀ s ∈ subsystems, ∃ col ∈ m.columns, col.subsystem = s
 
-/-- 行列完全性: 全カラムがレイヤー完全。 -/
+/-- Matrix completeness: all columns are layer-complete. -/
 def VMatrix.Complete (m : VMatrix) (subsystems : List String) : Prop :=
   m.SubSystemComplete subsystems ∧ ∀ col ∈ m.columns, col.Complete
 
 -- ============================================================
--- §3  ユーティリティ
+-- §3  Utilities
 -- ============================================================
 
-/-- 二つの VColumn から VMatrix を構成する。 -/
+/-- Construct a VMatrix from two VColumns. -/
 def VMatrix.fromColumns (c1 c2 : VColumn) : VMatrix :=
   { columns := [c1, c2] }
 
-/-- fromColumns は両カラムを含む。 -/
+/-- fromColumns contains both columns. -/
 theorem VMatrix.fromColumns_contains_both (c1 c2 : VColumn) :
     c1 ∈ (VMatrix.fromColumns c1 c2).columns ∧
     c2 ∈ (VMatrix.fromColumns c1 c2).columns := by
   simp [VMatrix.fromColumns]
 
-/-- V 字行列が全て trusted か。 -/
+/-- Whether the V-matrix is fully trusted. -/
 def VMatrix.fullyTrusted (m : VMatrix) : Bool :=
   m.columns.all (fun col => col.fullyTrusted)
 

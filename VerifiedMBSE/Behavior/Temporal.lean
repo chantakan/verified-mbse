@@ -10,29 +10,29 @@ as propositions over `Reachable`, and proves basic algebraic laws.
 namespace VerifiedMBSE.Behavior
 
 -- ============================================================
--- §1  基本時相演算子
+-- §1  Basic Temporal Operators
 -- ============================================================
 
-/-- Always (□ P): 到達可能な全ての状態で P が成り立つ。 -/
+/-- Always (□ P): P holds in all reachable states. -/
 def Always {S D : Type} {inv : S → D → Prop}
     (sm : StateMachine S D inv)
     (P : S → D → Prop) : Prop :=
   ∀ s d, Reachable sm s d → P s d
 
-/-- Eventually (◇ P): P が成り立つ状態に到達可能。 -/
+/-- Eventually (◇ P): a state where P holds is reachable. -/
 def Eventually {S D : Type} {inv : S → D → Prop}
     (sm : StateMachine S D inv)
     (P : S → D → Prop) : Prop :=
   ∃ s d, Reachable sm s d ∧ P s d
 
-/-- Next (○ P): 現在状態から1ステップで P が成り立つ状態に遷移可能。 -/
+/-- Next (○ P): a state where P holds is reachable in one step. -/
 def Next {S D : Type} {inv : S → D → Prop}
     (sm : StateMachine S D inv)
     (P : S → D → Prop) (s : S) (d : D) : Prop :=
   ∃ t ∈ sm.transitions,
     t.source = s ∧ t.guard d ∧ P t.target (t.effect d)
 
-/-- Until (P U Q): P が成り立ち続けて最終的に Q が成り立つ。 -/
+/-- Until (P U Q): P holds continuously until Q eventually holds. -/
 inductive Until {S D : Type} {inv : S → D → Prop}
     (sm : StateMachine S D inv)
     (P Q : S → D → Prop) : S → D → Prop where
@@ -46,14 +46,14 @@ inductive Until {S D : Type} {inv : S → D → Prop}
             Until sm P Q t.target (t.effect d) →
             Until sm P Q s d
 
-/-- Leads (P ⇒ ◇ Q): P が成り立つ全ての到達可能状態から Q に到達可能。 -/
+/-- Leads (P ⇒ ◇ Q): from every reachable state where P holds, Q is eventually reachable. -/
 def Leads {S D : Type} {inv : S → D → Prop}
     (sm : StateMachine S D inv)
     (P Q : S → D → Prop) : Prop :=
   Always sm (fun s d => P s d → Eventually sm Q)
 
 -- ============================================================
--- §2  基本代数則
+-- §2  Basic Algebraic Laws
 -- ============================================================
 
 /-- □ P ∧ □ Q → □(P ∧ Q) -/
@@ -64,7 +64,7 @@ theorem always_and {S D : Type} {inv : S → D → Prop}
     Always sm (fun s d => P s d ∧ Q s d) :=
   fun s d hr => ⟨hP s d hr, hQ s d hr⟩
 
-/-- □ P → ◇ P（WellFormed な場合）。 -/
+/-- □ P → ◇ P (when WellFormed). -/
 theorem always_implies_eventually {S D : Type} {inv : S → D → Prop}
     {sm : StateMachine S D inv}
     {P : S → D → Prop}
@@ -74,14 +74,14 @@ theorem always_implies_eventually {S D : Type} {inv : S → D → Prop}
   obtain ⟨d₀, hd₀⟩ := hwf
   exact ⟨sm.initialState, d₀, Reachable.init d₀ hd₀, h sm.initialState d₀ (Reachable.init d₀ hd₀)⟩
 
-/-- Leads P P は自明に成立（到達可能な状態自身が証人）。 -/
+/-- Leads P P holds trivially (the reachable state itself is the witness). -/
 theorem always_leads {S D : Type} {inv : S → D → Prop}
     {sm : StateMachine S D inv}
     {P : S → D → Prop} :
     Leads sm P P :=
   fun s d hr hP => ⟨s, d, hr, hP⟩
 
-/-- Until P Q → Eventually Q（到達可能性の証人が必要）。 -/
+/-- Until P Q → Eventually Q (requires a reachability witness). -/
 theorem until_implies_eventually {S D : Type} {inv : S → D → Prop}
     {sm : StateMachine S D inv}
     {P Q : S → D → Prop}

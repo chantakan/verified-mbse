@@ -16,7 +16,7 @@ open VerifiedMBSE.Behavior
 -- §1  StateMachineRepr
 -- ============================================================
 
-/-- TransitionRepr: 遷移の文字列表現。 -/
+/-- TransitionRepr: string representation of a transition. -/
 structure TransitionRepr where
   name       : String
   sourceName : String
@@ -24,12 +24,12 @@ structure TransitionRepr where
   guardDesc  : String := "true"
   effectDesc : String := "identity"
 
-/-- StateRepr: 状態の文字列表現。 -/
+/-- StateRepr: string representation of a state. -/
 structure StateRepr where
   name : String
   doc  : String := ""
 
-/-- StateMachineRepr: 状態機械の文字列表現。 -/
+/-- StateMachineRepr: string representation of a state machine. -/
 structure StateMachineRepr where
   name         : String
   states       : List StateRepr
@@ -37,15 +37,15 @@ structure StateMachineRepr where
   transitions  : List TransitionRepr
 
 -- ============================================================
--- §2  SysML v2 生成
+-- §2  SysML v2 Generation
 -- ============================================================
 
-/-- 状態定義を生成。 -/
+/-- Generate state definitions. -/
 def stateToSysML (s : StateRepr) (lvl : Nat) : String :=
   if s.doc.isEmpty then s!"{indent lvl}state {s.name};"
   else s!"{indent lvl}state {s.name} \{\n{indent (lvl+1)}doc /* {s.doc} */\n{indent lvl}}"
 
-/-- 遷移定義を生成。 -/
+/-- Generate transition definitions. -/
 def transitionToSysML (t : TransitionRepr) (lvl : Nat) : String :=
   let base := s!"{indent lvl}transition {t.name}\n" ++
     s!"{indent (lvl+1)}first {t.sourceName}\n" ++
@@ -61,7 +61,7 @@ def stateMachineToSysML (repr : StateMachineRepr) (lvl : Nat) : String :=
   let body := String.intercalate "\n\n" ([entry, ""] ++ states ++ [""] ++ trans)
   s!"{indent lvl}state def {repr.name} \{\n{body}\n{indent lvl}}"
 
-/-- StateMachineRepr.toSysML: トップレベル生成。 -/
+/-- StateMachineRepr.toSysML: top-level generation. -/
 def StateMachineRepr.toSysML (repr : StateMachineRepr) : String :=
   stateMachineToSysML repr 0
 

@@ -15,29 +15,29 @@ namespace VerifiedMBSE.Core
 -- §1  PartDef
 -- ============================================================
 
-/-- PartDef: ポートリストと不変条件を持つパーツ定義。 -/
+/-- PartDef: part definition with ports and an invariant. -/
 structure PartDef where
   baseType  : KerMLType
   ports     : List PortDef
   invariant : Prop
   deriving Repr
 
-/-- PartDef の整形式条件：全ポートの flowType が baseType と特殊化関係にある。 -/
+/-- Well-formedness of PartDef: every port's flowType has a specialization relation with baseType. -/
 def PartDef.WellFormed (pd : PartDef) : Prop :=
   ∀ p ∈ pd.ports, specializes p.flowType pd.baseType ∨
                   specializes pd.baseType p.flowType
 
 -- ============================================================
--- §2  PortRef と Connector
+-- §2  PortRef and Connector
 -- ============================================================
 
-/-- PortRef: パーツ内のポートへの参照（所属証明付き）。 -/
+/-- PortRef: reference to a port within a part (with membership proof). -/
 structure PortRef where
   part : PartDef
   port : PortDef
   mem  : port ∈ part.ports
 
-/-- Connector: 2つのポート参照を互換性証明付きで接続する。 -/
+/-- Connector: connects two port references with a compatibility proof. -/
 structure Connector where
   source     : PortRef
   target     : PortRef
@@ -49,12 +49,12 @@ structure Connector where
 -- §3  System
 -- ============================================================
 
-/-- System: パーツとコネクタのリスト。 -/
+/-- System: lists of parts and connectors. -/
 structure System where
   parts      : List PartDef
   connectors : List Connector
 
-/-- System の整形式条件：全コネクタの source/target が parts に含まれる。 -/
+/-- Well-formedness of System: all connector sources/targets are in parts. -/
 def System.WellFormed (sys : System) : Prop :=
   ∀ c ∈ sys.connectors,
     c.source.part ∈ sys.parts ∧ c.target.part ∈ sys.parts

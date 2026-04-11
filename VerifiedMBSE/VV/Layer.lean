@@ -4,14 +4,14 @@
 
 namespace VerifiedMBSE.VV
 
-/-- Layer: V 字モデルの設計レイヤー。 -/
+/-- Layer: V-model design layer. -/
 inductive Layer where
   | system
   | subsystem
   | component
   deriving Repr, BEq
 
-/-- Layer の順序: component < subsystem < system。 -/
+/-- Layer ordering: component < subsystem < system. -/
 instance : Ord Layer where
   compare a b := match a, b with
     | .component, .subsystem => .lt

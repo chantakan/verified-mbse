@@ -11,27 +11,27 @@ namespace VerifiedMBSE.VV
 -- §1  ModePowerSpec
 -- ============================================================
 
-/-- ModePowerSpec: モード別消費電力の仕様。 -/
+/-- ModePowerSpec: mode-dependent power consumption specification. -/
 structure ModePowerSpec (S : Type) where
-  /-- モード別消費電力関数 -/
+  /-- Power consumption function per mode -/
   modePower : S → Nat
-  /-- 最大消費電力（全モードの max） -/
+  /-- Maximum power consumption (max over all modes) -/
   maxPower : Nat
-  /-- maxPower は全モードの上界 -/
+  /-- maxPower is an upper bound for all modes -/
   maxPower_bound : ∀ s : S, modePower s ≤ maxPower
 
 -- ============================================================
--- §2  電力バジェット
+-- §2  Power Budget
 -- ============================================================
 
-/-- 二つのサブシステムの電力バジェットが予算内であることの命題。 -/
+/-- Proposition that the combined power of two subsystems is within budget. -/
 def PowerBudgetOK₂
     {S₁ S₂ : Type}
     (pw₁ : ModePowerSpec S₁) (pw₂ : ModePowerSpec S₂)
     (budget : Nat) (m₁ : S₁) (m₂ : S₂) : Prop :=
   pw₁.modePower m₁ + pw₂.modePower m₂ ≤ budget
 
-/-- maxPower の和が予算内なら、全モード組み合わせで予算内。 -/
+/-- If the sum of maxPower values is within budget, then all mode combinations are within budget. -/
 theorem powerBudget₂_from_max
     {S₁ S₂ : Type}
     (pw₁ : ModePowerSpec S₁) (pw₂ : ModePowerSpec S₂)

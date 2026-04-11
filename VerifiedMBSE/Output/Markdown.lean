@@ -13,56 +13,56 @@ open VerifiedMBSE.VV
 open VerifiedMBSE.Matrix
 
 -- ============================================================
--- §1  VVRecord → Markdown セル
+-- §1  VVRecord → Markdown Cell
 -- ============================================================
 
-/-- VVRecord を Markdown セル文字列に変換。 -/
+/-- Convert a VVRecord to a Markdown cell string. -/
 def vvRecordToMdCell (r : VVRecord) : String :=
   let mark := if r.validation.currentLevel == 1.0 then "✅" else "⏳"
   s!"{r.spec_name} {mark}"
 
 -- ============================================================
--- §2  VColumn → Markdown 列
+-- §2  VColumn → Markdown Column
 -- ============================================================
 
-/-- 特定レイヤーのセル文字列リストを返す。 -/
+/-- Return a list of cell strings for a specific layer. -/
 def columnCells (col : VColumn) (l : Layer) : List String :=
   (col.atLayer l).map vvRecordToMdCell
 
 -- ============================================================
--- §3  VMatrix → Markdown テーブル
+-- §3  VMatrix → Markdown Table
 -- ============================================================
 
-/-- 最大セル数を計算（行の高さ揃え用）。 -/
+/-- Calculate the maximum cell count (for row height alignment). -/
 private def maxCells (cols : List VColumn) (l : Layer) : Nat :=
   cols.foldl (fun mx col => max mx (columnCells col l).length) 0
 
-/-- リストを n 個にパディング。 -/
+/-- Pad a list to n elements. -/
 private def padList (xs : List String) (n : Nat) : List String :=
   xs ++ List.replicate (n - xs.length) ""
 
-/-- 文字列を n 文字に右パディング。 -/
+/-- Right-pad a string to n characters. -/
 private def rightpad (s : String) (n : Nat) : String :=
   s ++ String.ofList (List.replicate (n - s.length) ' ')
 
-/-- VMatrix を Markdown テーブル文字列に変換。 -/
+/-- Convert a VMatrix to a Markdown table string. -/
 def VMatrix.toMarkdown (m : VMatrix) (title : String := "Satellite") : String :=
   let cols := m.columns
   let totalRecs := m.totalRecords
   let subsysCount := cols.length
-  -- ヘッダー
+  -- Header
   let header := s!"## V-Matrix: {title} ({totalRecs} records, {subsysCount} subsystems)\n"
-  -- テーブルヘッダー
+  -- Table header
   let colHeaders := cols.map (·.subsystem)
   let headerRow := "| Layer     | " ++ String.intercalate " | " colHeaders ++ " |"
   let sepRow := "|-----------|" ++ String.intercalate "|" (cols.map fun _ => "---------------|")
-  -- 各レイヤーの行を生成
+  -- Generate rows for each layer
   let layers : List Layer := [.system, .subsystem, .component]
   let layerRows := layers.map fun l =>
     let lName := match l with | .system => "System" | .subsystem => "Subsystem" | .component => "Component"
     let nRows := maxCells cols l
     let paddedCols := cols.map fun col => padList (columnCells col l) nRows
-    -- 各行
+    -- Each row
     let rows := List.range nRows |>.map fun i =>
       let label := if i == 0 then lName else ""
       let cells := paddedCols.map fun pc =>

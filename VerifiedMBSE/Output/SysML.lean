@@ -20,11 +20,11 @@ open VerifiedMBSE.Matrix
 -- §1  PortDef → SysML v2
 -- ============================================================
 
-/-- ポート型を SysML v2 port def に変換。 -/
+/-- Convert a port type to a SysML v2 port def. -/
 def portTypeToSysML (t : KerMLType) : String :=
   s!"port def {baseTypeName t};"
 
-/-- PortDef をパート内のポート宣言に変換。 -/
+/-- Convert a PortDef to a port declaration within a part. -/
 def portDeclToSysML (p : PortDef) (lvl : Nat) : String :=
   let dir := directionKeyword p.feature.direction
   let typeStr := if isConjugated p.flowType
@@ -37,7 +37,7 @@ def portDeclToSysML (p : PortDef) (lvl : Nat) : String :=
 -- §2  PartDef → SysML v2
 -- ============================================================
 
-/-- PartDef を SysML v2 part def に変換。 -/
+/-- Convert a PartDef to a SysML v2 part def. -/
 def partDefToSysML (pd : PartDef) (lvl : Nat) : String :=
   let name := typeName pd.baseType
   let portDecls := pd.ports.map (fun p => portDeclToSysML p (lvl + 1))
@@ -45,27 +45,27 @@ def partDefToSysML (pd : PartDef) (lvl : Nat) : String :=
   if portDecls.isEmpty then s!"{indent lvl}part def {name};"
   else s!"{indent lvl}part def {name} \{\n{body}\n{indent lvl}}"
 
-/-- PartDef.toSysML: トップレベル生成。 -/
+/-- PartDef.toSysML: top-level generation. -/
 def PartDef.toSysML (pd : PartDef) : String := partDefToSysML pd 0
 
 -- ============================================================
 -- §3  Connector → SysML v2
 -- ============================================================
 
-/-- PortRef のドット記法。 -/
+/-- Dot notation for PortRef. -/
 def portRefStr (pr : PortRef) : String :=
   let partName := typeName pr.part.baseType
   let portName := match pr.port.feature.name with | some n => n | none => "unnamed"
   s!"{partName}.{portName}"
 
-/-- Connector を SysML v2 connection def に変換。 -/
+/-- Convert a Connector to a SysML v2 connection def. -/
 def connectorToSysML (c : Connector) (name : String) (lvl : Nat) : String :=
   s!"{indent lvl}connection def {name} \{\n" ++
   s!"{indent (lvl + 1)}end source :: {portRefStr c.source};\n" ++
   s!"{indent (lvl + 1)}end target :: {portRefStr c.target};\n" ++
   s!"{indent lvl}}"
 
-/-- Connector.toSysML: 名前を自動生成。 -/
+/-- Connector.toSysML: auto-generate name. -/
 def Connector.toSysML (c : Connector) : String :=
   connectorToSysML c s!"{typeName c.source.part.baseType}_to_{typeName c.target.part.baseType}" 0
 
@@ -73,7 +73,7 @@ def Connector.toSysML (c : Connector) : String :=
 -- §4  System → SysML v2
 -- ============================================================
 
-/-- System を SysML v2 part def に変換。 -/
+/-- Convert a System to a SysML v2 part def. -/
 def systemToSysML (sys : System) (name : String) (lvl : Nat) : String :=
   let partUsages := sys.parts.map fun pd =>
     s!"{indent (lvl+1)}part {(typeName pd.baseType).toLower} : {typeName pd.baseType};"
@@ -82,14 +82,14 @@ def systemToSysML (sys : System) (name : String) (lvl : Nat) : String :=
   let body := String.intercalate "\n" (partUsages ++ [""] ++ connUsages)
   s!"{indent lvl}part def {name} \{\n{body}\n{indent lvl}}"
 
-/-- System.toSysML: トップレベル生成。 -/
+/-- System.toSysML: top-level generation. -/
 def System.toSysML (sys : System) (name : String) : String := systemToSysML sys name 0
 
 -- ============================================================
 -- §5  VVRecord → SysML v2 requirement
 -- ============================================================
 
-/-- VVRecord を SysML v2 requirement def に変換。 -/
+/-- Convert a VVRecord to a SysML v2 requirement def. -/
 def vvRecordToSysML (r : VVRecord) (lvl : Nat) : String :=
   let confLevel := r.validation.currentLevel
   let confStr := if confLevel == 1.0 then "trusted"
@@ -101,37 +101,37 @@ def vvRecordToSysML (r : VVRecord) (lvl : Nat) : String :=
   s!"{indent (lvl+1)}attribute layer = \"{lStr}\";\n" ++
   s!"{indent lvl}}"
 
-/-- VVRecord.toSysML: トップレベル生成。 -/
+/-- VVRecord.toSysML: top-level generation. -/
 def VVRecord.toSysML (r : VVRecord) : String := vvRecordToSysML r 0
 
 -- ============================================================
 -- §6  VColumn → SysML v2 requirement package
 -- ============================================================
 
-/-- VColumn の要件群を SysML v2 package に変換。 -/
+/-- Convert VColumn requirements to a SysML v2 package. -/
 def vColumnRequirementsToSysML (col : VColumn) (lvl : Nat) : String :=
   let reqs := col.records.map (fun r => vvRecordToSysML r (lvl + 1))
   let body := String.intercalate "\n\n" reqs
   s!"{indent lvl}package '{col.subsystem}_Requirements' \{\n{body}\n{indent lvl}}"
 
 -- ============================================================
--- §7  ポート型収集
+-- §7  Port Type Collection
 -- ============================================================
 
-/-- ポート型定義の一覧を収集（重複排除）。 -/
+/-- Collect port type definitions (deduplicated). -/
 def collectPortTypes (parts : List PartDef) : List KerMLType :=
   let allTypes := parts.foldl (fun acc pd => acc ++ pd.ports.map (·.flowType)) []
   allTypes.foldl (fun acc t =>
     if acc.any (fun t' => typeName t == typeName t') then acc else acc ++ [t]) []
 
-/-- ポート型定義セクションを生成（共役型を除外）。 -/
+/-- Generate port type definition section (excluding conjugated types). -/
 def portTypeSection (allParts : List PartDef) (lvl : Nat) : String :=
   let baseTypes := (collectPortTypes allParts).filter (fun t => !isConjugated t)
   let defs := baseTypes.map (fun t => s!"{indent lvl}{portTypeToSysML t}")
   if defs.isEmpty then ""
   else s!"{indent lvl}// ── Port Type Definitions ──\n" ++ String.intercalate "\n" defs
 
-/-- パート定義セクションを生成（重複排除）。 -/
+/-- Generate part definition section (deduplicated). -/
 def partDefSection (allParts : List PartDef) (lvl : Nat) : String :=
   let unique := allParts.foldl (fun acc pd =>
     if acc.any (fun pd' => typeName pd.baseType == typeName pd'.baseType)

@@ -13,27 +13,27 @@ namespace VerifiedMBSE.Core
 -- §1  System.compose
 -- ============================================================
 
-/-- 2つのシステムを bridge コネクタ経由で合成する。 -/
+/-- Compose two systems via bridge connectors. -/
 def System.compose (s1 s2 : System) (bridge : List Connector) : System :=
   { parts      := s1.parts ++ s2.parts
     connectors := s1.connectors ++ s2.connectors ++ bridge }
 
-/-- compose 後の parts は連結。 -/
+/-- parts after compose is the concatenation. -/
 theorem System.compose_parts (s1 s2 : System) (bridge : List Connector) :
     (System.compose s1 s2 bridge).parts = s1.parts ++ s2.parts := rfl
 
-/-- compose 後の connectors は連結。 -/
+/-- connectors after compose is the concatenation. -/
 theorem System.compose_connectors (s1 s2 : System) (bridge : List Connector) :
     (System.compose s1 s2 bridge).connectors =
     s1.connectors ++ s2.connectors ++ bridge := rfl
 
 -- ============================================================
--- §2  WellFormed の保存
+-- §2  Preserving WellFormed
 -- ============================================================
 
-/-- compose は WellFormed を保存する：
-    両システムが WellFormed かつ bridge が合成 parts を参照するなら、
-    合成結果も WellFormed。 -/
+/-- compose preserves WellFormed:
+    if both systems are WellFormed and bridges reference composed parts,
+    the result is also WellFormed. -/
 theorem System.compose_WellFormed
     (s1 s2 : System) (bridge : List Connector)
     (hw1 : s1.WellFormed) (hw2 : s2.WellFormed)

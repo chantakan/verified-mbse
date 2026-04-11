@@ -14,10 +14,10 @@ open VerifiedMBSE.VV
 open VerifiedMBSE.Matrix
 
 -- ============================================================
--- §1  信頼度バー
+-- §1  Confidence Bar
 -- ============================================================
 
-/-- 信頼度をバーで表示（20文字幅）。 -/
+/-- Display confidence as a bar (20 characters wide). -/
 def confidenceBar (level : Float) : String :=
   let filled := (level * 20.0).toUInt32.toNat
   let filled := min filled 20
@@ -25,23 +25,23 @@ def confidenceBar (level : Float) : String :=
   let empty := String.ofList (List.replicate (20 - filled) '░')
   bar ++ empty
 
-/-- パーセント文字列。 -/
+/-- Percentage string. -/
 def confidencePct (level : Float) : String :=
   let pct := (level * 100.0).toUInt32.toNat
   s!"{pct}%"
 
 -- ============================================================
--- §2  VColumn サマリー
+-- §2  VColumn Summary
 -- ============================================================
 
-/-- VColumn の平均信頼度を計算。 -/
+/-- Calculate the average confidence of a VColumn. -/
 def avgConfidence (col : VColumn) : Float :=
   if col.records.isEmpty then 0.0
   else
     let total := col.records.foldl (fun acc r => acc + r.validation.currentLevel) 0.0
     total / col.records.length.toFloat
 
-/-- VColumn のサマリー行。 -/
+/-- Summary line for a VColumn. -/
 def columnSummaryLine (col : VColumn) : String :=
   let name := col.subsystem
   let padded := name ++ String.ofList (List.replicate (4 - min name.length 4) ' ')
@@ -49,10 +49,10 @@ def columnSummaryLine (col : VColumn) : String :=
   s!"  {padded} [{col.records.length}] {confidenceBar avg} {confidencePct avg}"
 
 -- ============================================================
--- §3  VMatrix サマリー
+-- §3  VMatrix Summary
 -- ============================================================
 
-/-- VMatrix をターミナルサマリー文字列に変換。 -/
+/-- Convert a VMatrix to a terminal summary string. -/
 def VMatrix.toTerminal (m : VMatrix) (title : String := "Satellite") : String :=
   let sep := "═══════════════════════════════════════════"
   let totalRecs := m.totalRecords
@@ -66,7 +66,7 @@ def VMatrix.toTerminal (m : VMatrix) (title : String := "Satellite") : String :=
     s!"{sep}"
   let colLines := m.columns.map columnSummaryLine
   let body := String.intercalate "\n" colLines
-  -- 完全性チェック
+  -- Completeness check
   let allCovered := m.columns.all (·.allLayersCovered)
   let coverStr := if allCovered then "✓ All layers covered" else "✗ Missing layers"
   let footer :=

@@ -11,33 +11,33 @@ namespace VerifiedMBSE.Matrix
 open VerifiedMBSE.VV
 
 -- ============================================================
--- §1  クエリ
+-- §1  Queries
 -- ============================================================
 
-/-- 特定サブシステムのカラムを取得する。 -/
+/-- Get a column for a specific subsystem. -/
 def VMatrix.column (m : VMatrix) (s : String) : Option VColumn :=
   m.columns.find? (fun col => col.subsystem == s)
 
-/-- 特定セルの VVRecord を取得する。 -/
+/-- Get VVRecords for a specific cell. -/
 def VMatrix.cell (m : VMatrix) (l : Layer) (s : String) :
     List VVRecord :=
   match m.column s with
   | some col => col.atLayer l
   | none     => []
 
-/-- 全 VVRecord を平坦化して取得する。 -/
+/-- Get all VVRecords flattened. -/
 def VMatrix.allRecords (m : VMatrix) : List VVRecord :=
   m.columns.foldl (fun acc col => acc ++ col.records) []
 
-/-- VVRecord の総数。 -/
+/-- Total VVRecord count. -/
 def VMatrix.totalRecords (m : VMatrix) : Nat :=
   m.allRecords.length
 
 -- ============================================================
--- §2  診断情報
+-- §2  Diagnostics
 -- ============================================================
 
-/-- VVRecord のサマリー文字列。 -/
+/-- Summary string for a VVRecord. -/
 def VVRecord.summary (r : VVRecord) : String :=
   let layerStr := match r.layer with
     | .system    => "SYS"
@@ -46,13 +46,13 @@ def VVRecord.summary (r : VVRecord) : String :=
   let confStr := toString r.validation.currentLevel
   s!"[{layerStr}] {r.spec_name} (confidence: {confStr})"
 
-/-- VColumn のサマリー文字列。 -/
+/-- Summary string for a VColumn. -/
 def VColumn.summary (col : VColumn) : String :=
   let recordSummaries := col.records.map VVRecord.summary
   s!"=== {col.subsystem} ({col.records.length} records) ===\n" ++
     String.intercalate "\n" recordSummaries
 
-/-- VMatrix のサマリー文字列。 -/
+/-- Summary string for a VMatrix. -/
 def VMatrix.summary (m : VMatrix) : String :=
   let header := s!"V-Matrix: {m.columns.length} subsystems, {m.totalRecords} records"
   let colSummaries := m.columns.map VColumn.summary

@@ -25,135 +25,135 @@ namespace VerifiedMBSE.Equivalence
 open VerifiedMBSE.Core
 
 -- ============================================================
--- §1  Setoid 構造
+-- §1  Setoid Structure
 -- ============================================================
 
-/-- ComponentEquiv は同値関係であることの証明。 -/
+/-- Proof that ComponentEquiv is an equivalence relation. -/
 theorem componentEquiv_equivalence : Equivalence ComponentEquiv :=
   { refl  := ComponentEquiv.refl
     symm  := fun h => h.symm
     trans := fun h₁ h₂ => h₁.trans h₂ }
 
-/-- PartDef 上の Setoid インスタンス。
-    ComponentEquiv を等価性関係として用いる。 -/
+/-- Setoid instance on PartDef.
+    Uses ComponentEquiv as the equivalence relation. -/
 instance componentSetoid : Setoid PartDef :=
   ⟨ComponentEquiv, componentEquiv_equivalence⟩
 
 -- ============================================================
--- §2  DesignSpace（設計空間 = 商型）
+-- §2  DesignSpace (Design Space = Quotient Type)
 -- ============================================================
 
-/-- DesignSpace: PartDef を ComponentEquiv で割った商型。
-    HoTT の universe `U` に対応。等しい要素は互いに代替可能。 -/
+/-- DesignSpace: quotient type of PartDef by ComponentEquiv.
+    Corresponds to the HoTT universe `U`. Equal elements are mutually substitutable. -/
 def DesignSpace : Type := Quotient componentSetoid
 
-/-- PartDef から DesignSpace への埋め込み。 -/
+/-- Embedding from PartDef into DesignSpace. -/
 def DesignSpace.mk (pd : PartDef) : DesignSpace :=
   Quotient.mk componentSetoid pd
 
-/-- 表記: ⟦pd⟧ で DesignSpace.mk pd を表す。 -/
+/-- Notation: ⟦pd⟧ denotes DesignSpace.mk pd. -/
 scoped notation "⟦" pd "⟧" => DesignSpace.mk pd
 
 -- ============================================================
--- §3  Univalence（Sound + Complete）
+-- §3  Univalence (Sound + Complete)
 -- ============================================================
 
 /-- ua (Univalence axiom, sound direction):
-    ComponentEquiv a b → ⟦a⟧ = ⟦b⟧。
-    Setoid quotient では Quotient.sound として自動的に成立する。 -/
+    ComponentEquiv a b → ⟦a⟧ = ⟦b⟧.
+    Automatically holds via Quotient.sound in the setoid quotient. -/
 theorem ua {a b : PartDef} (h : ComponentEquiv a b) : ⟦a⟧ = ⟦b⟧ :=
   Quotient.sound h
 
 /-- ua_inv (Univalence axiom, complete direction):
-    ⟦a⟧ = ⟦b⟧ → ComponentEquiv a b。
-    Quotient.exact により成立。 -/
+    ⟦a⟧ = ⟦b⟧ → ComponentEquiv a b.
+    Holds via Quotient.exact. -/
 theorem ua_inv {a b : PartDef} (h : ⟦a⟧ = ⟦b⟧) : ComponentEquiv a b :=
   Quotient.exact h
 
-/-- ua と ua_inv は互いに逆写像。
-    これが (ComponentEquiv a b) ≃ (⟦a⟧ = ⟦b⟧) の同値性を与える。 -/
+/-- ua and ua_inv are mutual inverses.
+    This gives the equivalence (ComponentEquiv a b) ≃ (⟦a⟧ = ⟦b⟧). -/
 theorem ua_iff {a b : PartDef} : ComponentEquiv a b ↔ ⟦a⟧ = ⟦b⟧ :=
   ⟨ua, ua_inv⟩
 
 -- ============================================================
--- §4  Transport（パスに沿った輸送）
+-- §4  Transport (Along Paths)
 -- ============================================================
 
-/-- transport: DesignSpace 上の述語を等号に沿って輸送する。
-    HoTT の transport : (p : a = b) → P a → P b の MBSE 版。 -/
+/-- transport: transports a predicate on DesignSpace along an equality.
+    MBSE version of HoTT transport: (p : a = b) → P a → P b. -/
 theorem transport {P : DesignSpace → Prop}
     {a b : PartDef} (h : ComponentEquiv a b) :
     P ⟦a⟧ → P ⟦b⟧ :=
   ua h ▸ id
 
-/-- transport_symm: 逆方向の輸送。 -/
+/-- transport_symm: transport in the reverse direction. -/
 theorem transport_symm {P : DesignSpace → Prop}
     {a b : PartDef} (h : ComponentEquiv a b) :
     P ⟦b⟧ → P ⟦a⟧ :=
   transport h.symm
 
-/-- transport_refl: 反射的等価性での輸送は恒等写像。 -/
+/-- transport_refl: transport along reflexive equivalence is the identity. -/
 theorem transport_refl {P : DesignSpace → Prop}
     (a : PartDef) (pa : P ⟦a⟧) :
     transport (ComponentEquiv.refl a) pa = pa := by
   simp
 
 -- ============================================================
--- §5  Lift（商型への関数持ち上げ）
+-- §5  Lift (Lifting Functions to the Quotient)
 -- ============================================================
 
-/-- DesignSpace 上の述語を定義するための lift。
-    ComponentEquiv を尊重する述語のみ持ち上げ可能。 -/
+/-- Lift for defining predicates on DesignSpace.
+    Only predicates respecting ComponentEquiv can be lifted. -/
 def DesignSpace.liftProp (P : PartDef → Prop)
     (resp : ∀ a b : PartDef, ComponentEquiv a b → (P a ↔ P b)) :
     DesignSpace → Prop :=
   Quotient.lift P (fun a b hab => propext (resp a b hab))
 
-/-- liftProp は元の述語と整合する。 -/
+/-- liftProp is consistent with the original predicate. -/
 theorem DesignSpace.liftProp_mk (P : PartDef → Prop)
     (resp : ∀ a b : PartDef, ComponentEquiv a b → (P a ↔ P b))
     (pd : PartDef) :
     DesignSpace.liftProp P resp ⟦pd⟧ = P pd :=
   rfl
 
-/-- DesignSpace 上の Bool 値関数の lift。 -/
+/-- Lift for Bool-valued functions on DesignSpace. -/
 def DesignSpace.liftBool (f : PartDef → Bool)
     (resp : ∀ a b : PartDef, ComponentEquiv a b → f a = f b) :
     DesignSpace → Bool :=
   Quotient.lift f resp
 
 -- ============================================================
--- §6  Path Induction（帰納法原理）
+-- §6  Path Induction
 -- ============================================================
 
-/-- DesignSpace 上の帰納法（∀ 量化）。
-    HoTT の path induction の MBSE 版。 -/
+/-- Induction on DesignSpace (universal quantification).
+    MBSE version of HoTT path induction. -/
 theorem DesignSpace.ind {P : DesignSpace → Prop}
     (h : ∀ pd : PartDef, P ⟦pd⟧) :
     ∀ d : DesignSpace, P d :=
   Quotient.ind h
 
-/-- DesignSpace 上の二項帰納法。 -/
+/-- Binary induction on DesignSpace. -/
 theorem DesignSpace.ind₂ {P : DesignSpace → DesignSpace → Prop}
     (h : ∀ a b : PartDef, P ⟦a⟧ ⟦b⟧) :
     ∀ d₁ d₂ : DesignSpace, P d₁ d₂ :=
   Quotient.ind (fun a => Quotient.ind (fun b => h a b))
 
 -- ============================================================
--- §7  Fiber（ファイバー）
+-- §7  Fiber
 -- ============================================================
 
-/-- Fiber: 設計空間の点 d の上のファイバー。
-    d に等価な全ての具体的 PartDef の集合。
-    HoTT の homotopy fiber fib(f, b) = Σ(a:A). f(a) = b。 -/
+/-- Fiber: fiber over a point d in the design space.
+    The set of all concrete PartDefs equivalent to d.
+    HoTT homotopy fiber fib(f, b) = Σ(a:A). f(a) = b. -/
 def Fiber (d : DesignSpace) : Type :=
   { pd : PartDef // ⟦pd⟧ = d }
 
-/-- 各ファイバーは非空（全ての DesignSpace の点は代表元を持つ）。 -/
+/-- Every fiber is nonempty (every DesignSpace point has a representative). -/
 theorem fiber_nonempty (d : DesignSpace) : Nonempty (Fiber d) :=
   Quotient.inductionOn d (fun pd => ⟨⟨pd, rfl⟩⟩)
 
-/-- ファイバーの任意の2要素は ComponentEquiv。 -/
+/-- Any two elements of a fiber are ComponentEquiv. -/
 theorem fiber_equiv {d : DesignSpace}
     (x y : Fiber d) : ComponentEquiv x.val y.val := by
   have hx := x.property
@@ -161,11 +161,11 @@ theorem fiber_equiv {d : DesignSpace}
   exact ua_inv (hx.trans hy.symm)
 
 -- ============================================================
--- §8  Groupoid 構造
+-- §8  Groupoid Structure
 -- ============================================================
 
-/-- ComponentEquiv は groupoid 構造を持つ（strict category で morphism が invertible）。
-    refl = id, trans = comp, symm = inv。 -/
+/-- ComponentEquiv has a groupoid structure (strict category with invertible morphisms).
+    refl = id, trans = comp, symm = inv. -/
 theorem groupoid_left_id {a b : PartDef} (h : ComponentEquiv a b) :
     (ComponentEquiv.refl a).trans h = h := by
   cases h; rfl
@@ -183,11 +183,11 @@ theorem groupoid_right_inv {a b : PartDef} (h : ComponentEquiv a b) :
   cases h; rfl
 
 -- ============================================================
--- §9  System レベルの Univalence
+-- §9  System-Level Univalence
 -- ============================================================
 
-/-- システム内のコンポーネントを等価なものに置換しても
-    設計空間での表現は変わらない。 -/
+/-- Replacing a component in a system with an equivalent one
+    does not change its representation in the design space. -/
 theorem system_component_ua
     {a b : PartDef} (h : ComponentEquiv a b)
     (f : DesignSpace → Prop) :
@@ -196,19 +196,19 @@ theorem system_component_ua
   · exact transport h
   · exact transport_symm h
 
-/-- 不変条件は設計空間上で well-defined（ComponentEquiv を尊重）。 -/
+/-- Invariants are well-defined on the design space (respect ComponentEquiv). -/
 theorem invariant_respects_equiv {a b : PartDef}
     (h : ComponentEquiv a b) :
     a.invariant ↔ b.invariant :=
   h.invariantIff
 
-/-- 不変条件の DesignSpace への持ち上げ。 -/
+/-- Lifting the invariant to DesignSpace. -/
 def designInvariant : DesignSpace → Prop :=
   DesignSpace.liftProp
     (fun pd => pd.invariant)
     (fun _ _ h => h.invariantIff)
 
-/-- designInvariant は元の invariant と整合。 -/
+/-- designInvariant is consistent with the original invariant. -/
 theorem designInvariant_mk (pd : PartDef) :
     designInvariant ⟦pd⟧ = pd.invariant :=
   rfl

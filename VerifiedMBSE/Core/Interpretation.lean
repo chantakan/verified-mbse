@@ -12,35 +12,35 @@ Defines interpretation-based extent of `PartDef`, `PartInstance` (dependent reco
 namespace VerifiedMBSE.Core
 
 -- ============================================================
--- §1  PartInstance と extent
+-- §1  PartInstance and Extent
 -- ============================================================
 
-/-- PortInstance: 解釈 I のもとでのポートのインスタンス型。 -/
+/-- PortInstance: instance type of a port under interpretation I. -/
 def PortInstance (I : Interpretation) (p : PortDef) : Type := I p.flowType
 
-/-- PartInstance: 解釈 I のもとでの PartDef のインスタンス。
-    キャリア値と不変条件の証明を持つ依存レコード。 -/
+/-- PartInstance: instance of a PartDef under interpretation I.
+    A dependent record with a carrier value and proof of the invariant. -/
 structure PartInstance (I : Interpretation) (pd : PartDef) where
   carrier   : I pd.baseType
   inv_holds : pd.invariant
 
-/-- PartDef の外延：PartInstance の型。 -/
+/-- Extent of a PartDef: the type of PartInstances. -/
 def PartDef.extent (I : Interpretation) (pd : PartDef) : Type := PartInstance I pd
 
 -- ============================================================
--- §2  PartDef レベルの semanticSpecializes
+-- §2  PartDef-Level semanticSpecializes
 -- ============================================================
 
-/-- PartDef レベルの意味論的特殊化。 -/
+/-- Semantic specialization at the PartDef level. -/
 def PartDef.semanticSpecializes (I : Interpretation) (pdA pdB : PartDef) : Prop :=
   ∃ f : PartDef.extent I pdA → PartDef.extent I pdB, Function.Injective f
 
-/-- PartDef.semanticSpecializes は反射的。 -/
+/-- PartDef.semanticSpecializes is reflexive. -/
 theorem PartDef.semanticSpecializes_refl (I : Interpretation) (pd : PartDef) :
     PartDef.semanticSpecializes I pd pd :=
   ⟨id, Function.injective_id⟩
 
-/-- PartDef.semanticSpecializes は推移的。 -/
+/-- PartDef.semanticSpecializes is transitive. -/
 theorem PartDef.semanticSpecializes_trans
     (I : Interpretation) {pdA pdB pdC : PartDef}
     (hAB : PartDef.semanticSpecializes I pdA pdB)
@@ -49,11 +49,11 @@ theorem PartDef.semanticSpecializes_trans
   obtain ⟨f, hf⟩ := hAB; obtain ⟨g, hg⟩ := hBC
   exact ⟨g ∘ f, hg.comp hf⟩
 
-/-- 不変条件の継承関係。 -/
+/-- Invariant inheritance relation. -/
 def InvariantInheritance (pdA pdB : PartDef) : Prop := pdA.invariant → pdB.invariant
 
-/-- baseType の semanticSpecializes と InvariantInheritance から
-    PartDef レベルの semanticSpecializes を導出する。 -/
+/-- Derive PartDef-level semanticSpecializes from
+    baseType semanticSpecializes and InvariantInheritance. -/
 theorem PartDef.semanticSpecializes_from_base
     (I : Interpretation) (pdA pdB : PartDef)
     (hBase : VerifiedMBSE.Core.semanticSpecializes I pdA.baseType pdB.baseType)
@@ -67,7 +67,7 @@ theorem PartDef.semanticSpecializes_from_base
   have heq : c₁ = c₂ := hf hcarrier
   subst heq; simp
 
-/-- PartDef レベルの健全性定理。 -/
+/-- Soundness theorem at the PartDef level. -/
 theorem partDef_soundness
     (I : Interpretation) (hI : InterpretationRespects I)
     (pdA pdB : PartDef)
@@ -81,15 +81,15 @@ theorem partDef_soundness
 -- §3  ConnectorSemantic
 -- ============================================================
 
-/-- ConnectorSemantic: コネクタの意味論（値転送関数の型）。 -/
+/-- ConnectorSemantic: connector semantics (type of value transfer functions). -/
 def ConnectorSemantic (I : Interpretation) (c : Connector) : Type :=
   I c.source.port.flowType → I c.target.port.flowType
 
-/-- 直列合成可能性条件。 -/
+/-- Serial composability condition. -/
 def Connector.Composable (c1 c2 : Connector) : Prop :=
   c1.target.port.flowType = c2.source.port.flowType
 
-/-- ConnectorSemantic の直列合成。 -/
+/-- Serial composition of ConnectorSemantics. -/
 def ConnectorSemantic.compose
     (I : Interpretation) (c1 c2 : Connector)
     (h : Connector.Composable c1 c2)
@@ -98,7 +98,7 @@ def ConnectorSemantic.compose
     I c1.source.port.flowType → I c2.target.port.flowType :=
   fun v => f2 (h ▸ f1 v)
 
-/-- 恒等 ConnectorSemantic（source と target の flowType が等しい場合）。 -/
+/-- Identity ConnectorSemantic (when source and target flowTypes are equal). -/
 def ConnectorSemantic.id_of_eq
     (I : Interpretation) (c : Connector)
     (h : c.source.port.flowType = c.target.port.flowType) :
@@ -106,10 +106,10 @@ def ConnectorSemantic.id_of_eq
   fun v => h ▸ v
 
 -- ============================================================
--- §4  圏論的性質
+-- §4  Categorical Properties
 -- ============================================================
 
-/-- ConnectorSemantic の結合性。 -/
+/-- Associativity of ConnectorSemantic. -/
 theorem ConnectorSemantic.compose_assoc
     (I : Interpretation) (c1 c2 c3 : Connector)
     (h12 : Connector.Composable c1 c2)
@@ -122,14 +122,14 @@ theorem ConnectorSemantic.compose_assoc
     ConnectorSemantic.compose I c2 c3 h23 f2 f3 (h12 ▸ f1 v) := by
   simp [ConnectorSemantic.compose]
 
-/-- 2回の transport と trans の等価性。 -/
+/-- Equivalence of double transport and trans. -/
 private theorem eq_transport_trans
     {α : Type} {P : α → Type}
     {a b c : α} (h1 : a = b) (h2 : b = c) (x : P a) :
     h2 ▸ h1 ▸ x = h1.trans h2 ▸ x := by
   cases h1; rfl
 
-/-- ConnectorSemantic の右単位元律。 -/
+/-- Right identity law of ConnectorSemantic. -/
 theorem ConnectorSemantic.compose_id_right
     (I : Interpretation) (c1 c2 : Connector)
     (h12 : Connector.Composable c1 c2)
@@ -142,7 +142,7 @@ theorem ConnectorSemantic.compose_id_right
   simp only [ConnectorSemantic.compose, ConnectorSemantic.id_of_eq]
   exact eq_transport_trans h12 heq (f v)
 
-/-- ConnectorSemantic の左単位元律。 -/
+/-- Left identity law of ConnectorSemantic. -/
 theorem ConnectorSemantic.compose_id_left
     (I : Interpretation) (c1 c2 : Connector)
     (h12 : Connector.Composable c1 c2)
@@ -156,7 +156,7 @@ theorem ConnectorSemantic.compose_id_left
   congr 1
   exact eq_transport_trans heq h12 v
 
-/-- 単位元律の系：3連結合成の左端が恒等のとき。 -/
+/-- Corollary: when the leftmost connector in a triple composition is identity. -/
 theorem ConnectorSemantic.compose_id_left_assoc
     (I : Interpretation) (c1 c2 c3 : Connector)
     (h12 : Connector.Composable c1 c2)

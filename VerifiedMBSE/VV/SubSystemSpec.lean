@@ -18,24 +18,24 @@ open VerifiedMBSE.Behavior
 -- §1  StructuralSpec
 -- ============================================================
 
-/-- StructuralSpec: サブシステムの構造的側面。 -/
+/-- StructuralSpec: structural aspect of a subsystem. -/
 structure StructuralSpec where
-  /-- サブシステム名 -/
+  /-- Subsystem name -/
   name : String
-  /-- パート定義リスト -/
+  /-- List of part definitions -/
   parts : List PartDef
-  /-- 接続リスト -/
+  /-- List of connectors -/
   connectors : List Connector
   /-- System -/
   system : System
-  /-- system.parts の整合性 -/
+  /-- Consistency of system.parts -/
   system_eq_parts : system.parts = parts
-  /-- system.connectors の整合性 -/
+  /-- Consistency of system.connectors -/
   system_eq_connectors : system.connectors = connectors
-  /-- 構造的整合性 -/
+  /-- Structural well-formedness -/
   wellFormed : system.WellFormed
 
-/-- StructuralSpec のスマートコンストラクタ。 -/
+/-- Smart constructor for StructuralSpec. -/
 def StructuralSpec.mk' (name : String)
     (parts : List PartDef)
     (connectors : List Connector)
@@ -49,7 +49,7 @@ def StructuralSpec.mk' (name : String)
     system_eq_connectors := rfl
     wellFormed := wf }
 
-/-- 全パートの不変条件が成立する命題。 -/
+/-- Proposition that all part invariants hold. -/
 def StructuralSpec.allPartsInvariant (spec : StructuralSpec) : Prop :=
   ∀ p ∈ spec.parts, p.invariant
 
@@ -57,35 +57,35 @@ def StructuralSpec.allPartsInvariant (spec : StructuralSpec) : Prop :=
 -- §2  BehavioralSpec
 -- ============================================================
 
-/-- BehavioralSpec: サブシステムの振る舞い的側面。 -/
+/-- BehavioralSpec: behavioral aspect of a subsystem. -/
 structure BehavioralSpec (S : Type) (D : Type) (inv : S → D → Prop) where
-  /-- 状態機械 -/
+  /-- State machine -/
   sm : StateMachine S D inv
-  /-- 状態機械の整合性 -/
+  /-- State machine well-formedness -/
   wellFormed : sm.WellFormed
 
 -- ============================================================
 -- §3  FDIRBundle
 -- ============================================================
 
-/-- FDIRBundle: FDIR 要件の証明束。 -/
+/-- FDIRBundle: proof bundle for FDIR requirements. -/
 structure FDIRBundle
     {S D : Type} {inv : S → D → Prop}
     (sm : StateMachine S D inv) where
-  /-- 故障状態の判定 -/
+  /-- Fault state predicate -/
   isFault : S → Prop
-  /-- 復旧先状態の判定 -/
+  /-- Recovery state predicate -/
   isRecovery : S → Prop
-  /-- データの安全条件 -/
+  /-- Data safety condition -/
   isSafe : D → Prop
-  /-- R1: 安全性 □(isSafe d) -/
+  /-- R1: Safety □(isSafe d) -/
   safety : Always sm (fun _ d => isSafe d)
-  /-- R2: 故障検知 ◇(isFault s) -/
+  /-- R2: Fault detection ◇(isFault s) -/
   detection : Eventually sm (fun s _ => isFault s)
-  /-- R3: 故障復旧 □(isFault → ◇ isRecovery) -/
+  /-- R3: Fault recovery □(isFault → ◇ isRecovery) -/
   recovery : Leads sm (fun s _ => isFault s) (fun s _ => isRecovery s)
 
-/-- FDIRBundle → FDIRSpec への変換。 -/
+/-- Conversion from FDIRBundle to FDIRSpec. -/
 def FDIRBundle.toFDIRSpec
     {S D : Type} {inv : S → D → Prop}
     {sm : StateMachine S D inv}
@@ -99,37 +99,37 @@ def FDIRBundle.toFDIRSpec
 -- §4  SubSystemSpec
 -- ============================================================
 
-/-- SubSystemSpec: 構造 + 振る舞い + FDIR を統合したサブシステム仕様。
-    新サブシステム追加時にこのインスタンスを1つ作るだけで完結する。 -/
+/-- SubSystemSpec: unified subsystem specification integrating structure, behavior, and FDIR.
+    Adding a new subsystem requires constructing just one instance of this type. -/
 structure SubSystemSpec (S : Type) (D : Type) (inv : S → D → Prop) where
-  /-- 構造仕様 -/
+  /-- Structural specification -/
   structural : StructuralSpec
-  /-- 振る舞い仕様 -/
+  /-- Behavioral specification -/
   behavioral : BehavioralSpec S D inv
-  /-- FDIR 証明束 -/
+  /-- FDIR proof bundle -/
   fdir : FDIRBundle behavioral.sm
 
-/-- サブシステム名。 -/
+/-- Subsystem name。 -/
 def SubSystemSpec.name {S D : Type} {inv : S → D → Prop}
     (spec : SubSystemSpec S D inv) : String :=
   spec.structural.name
 
-/-- System を取得。 -/
+/-- Get the System. -/
 def SubSystemSpec.system {S D : Type} {inv : S → D → Prop}
     (spec : SubSystemSpec S D inv) : System :=
   spec.structural.system
 
-/-- StateMachine を取得。 -/
+/-- Get the StateMachine. -/
 def SubSystemSpec.stateMachine {S D : Type} {inv : S → D → Prop}
     (spec : SubSystemSpec S D inv) : StateMachine S D inv :=
   spec.behavioral.sm
 
-/-- 整合性条件：構造と振る舞いの両方が WellFormed。 -/
+/-- Consistency: both structural and behavioral parts are WellFormed. -/
 def SubSystemSpec.Consistent {S D : Type} {inv : S → D → Prop}
     (spec : SubSystemSpec S D inv) : Prop :=
   spec.structural.system.WellFormed ∧ spec.behavioral.sm.WellFormed
 
-/-- FDIRSpec の自動導出。 -/
+/-- Automatic derivation of FDIRSpec. -/
 theorem SubSystemSpec.fdir_derivable {S D : Type} {inv : S → D → Prop}
     (spec : SubSystemSpec S D inv) :
     FDIRSpec spec.behavioral.sm
@@ -137,10 +137,10 @@ theorem SubSystemSpec.fdir_derivable {S D : Type} {inv : S → D → Prop}
   spec.fdir.toFDIRSpec
 
 -- ============================================================
--- §5  VVRecord の自動生成
+-- §5  Automatic VVRecord Generation
 -- ============================================================
 
-/-- サブシステムレベルの VVRecord。 -/
+/-- Subsystem-level VVRecord. -/
 def SubSystemSpec.subsystemRecord {S D : Type} {inv : S → D → Prop}
     (spec : SubSystemSpec S D inv) :
     VVRecord :=
@@ -150,7 +150,7 @@ def SubSystemSpec.subsystemRecord {S D : Type} {inv : S → D → Prop}
     verified     := spec.structural.wellFormed
     validation   := ValidationTrace.init (.trusted spec.structural.wellFormed) }
 
-/-- システムレベルの VVRecord (R1 Safety)。 -/
+/-- System-level VVRecord (R1 Safety). -/
 def SubSystemSpec.safetyRecord {S D : Type} {inv : S → D → Prop}
     (spec : SubSystemSpec S D inv) :
     VVRecord :=
@@ -160,7 +160,7 @@ def SubSystemSpec.safetyRecord {S D : Type} {inv : S → D → Prop}
     verified     := spec.fdir.safety
     validation   := ValidationTrace.init (.trusted spec.fdir.safety) }
 
-/-- システムレベルの VVRecord (R3 Recovery)。 -/
+/-- System-level VVRecord (R3 Recovery). -/
 def SubSystemSpec.recoveryRecord {S D : Type} {inv : S → D → Prop}
     (spec : SubSystemSpec S D inv) :
     VVRecord :=
@@ -173,10 +173,10 @@ def SubSystemSpec.recoveryRecord {S D : Type} {inv : S → D → Prop}
     validation   := ValidationTrace.init (.trusted spec.fdir.recovery) }
 
 -- ============================================================
--- §6  構造合成
+-- §6  Structural Composition
 -- ============================================================
 
-/-- 二つのサブシステムを構造的に合成する。 -/
+/-- Structurally compose two subsystems. -/
 def StructuralSpec.compose
     (s1 s2 : StructuralSpec) (bridge : List Connector)
     (hbridge : ∀ c ∈ bridge,
@@ -192,7 +192,7 @@ def StructuralSpec.compose
     wellFormed := System.compose_WellFormed s1.system s2.system bridge
                     s1.wellFormed s2.wellFormed hbridge }
 
-/-- 合成されたシステムのパート数は部分の和。 -/
+/-- The part count of the composed system equals the sum of its parts. -/
 theorem StructuralSpec.compose_parts_length
     (s1 s2 : StructuralSpec) (bridge : List Connector)
     (hbridge : ∀ c ∈ bridge,

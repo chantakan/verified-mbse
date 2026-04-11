@@ -12,10 +12,10 @@ namespace VerifiedMBSE.VV
 open VerifiedMBSE.Core
 
 -- ============================================================
--- §1  コンポーネントレベル VVRecord
+-- §1  Component-Level VVRecord
 -- ============================================================
 
-/-- コンポーネントレベルの VVRecord を構成するヘルパー。 -/
+/-- Helper to construct a component-level VVRecord. -/
 def mkComponentRecord
     (subsysName : String) (idx : Nat)
     (pd : PartDef) (proof : pd.invariant) :
@@ -33,16 +33,16 @@ def mkComponentRecord
 -- §2  SubSystemVVBundle
 -- ============================================================
 
-/-- SubSystemVVBundle: SubSystemSpec から構成される VVRecord の束。 -/
+/-- SubSystemVVBundle: bundle of VVRecords constructed from a SubSystemSpec. -/
 structure SubSystemVVBundle
     {S D : Type} {inv : S → D → Prop}
     (spec : SubSystemSpec S D inv) where
-  /-- コンポーネントレベルの VVRecord リスト -/
+  /-- List of component-level VVRecords -/
   componentRecords : List VVRecord
-  /-- 追加のシステムレベル VVRecord（電力バジェット等） -/
+  /-- Additional system-level VVRecords (e.g. power budget) -/
   extraSystemRecords : List VVRecord := []
 
-/-- 全 VVRecord を取得。 -/
+/-- Get all VVRecords. -/
 def SubSystemVVBundle.allRecords
     {S D : Type} {inv : S → D → Prop}
     {spec : SubSystemSpec S D inv}
@@ -53,7 +53,7 @@ def SubSystemVVBundle.allRecords
     ++ [spec.safetyRecord, spec.recoveryRecord]
     ++ bundle.extraSystemRecords
 
-/-- VVRecord 数の定理。 -/
+/-- Theorem on VVRecord count. -/
 theorem SubSystemVVBundle.allRecords_length
     {S D : Type} {inv : S → D → Prop}
     {spec : SubSystemSpec S D inv}
