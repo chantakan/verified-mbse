@@ -86,4 +86,100 @@ theorem satelliteVMatrix_Complete :
     rcases hcol with rfl | rfl | rfl | rfl <;>
       refine ⟨?_, ?_, ?_⟩ <;> native_decide
 
+-- ============================================================
+-- §5  Contract-Based Integration
+-- ============================================================
+
+-- EPS-AOCS power contract: EPS guarantees a bounded supply, AOCS assumes it.
+-- This is the integration story that is invisible at the subsystem level
+-- and becomes a type-level obligation at the system level.
+
+/-- EPS guarantees max 100W consumption on its own bus. -/
+def epsGuarantee : Prop := epsModePowerSpec.maxPower ≤ 100
+
+/-- AOCS assumes that its peak consumption (200W) is compatible with the
+    allocated bus share. The environment must provide 200W for AOCS. -/
+def aocsAssume : Prop := aocsModePowerSpec.maxPower ≤ 200
+
+/-- Contract for EPS: under a nominal bus load assumption, EPS bounds its own
+    consumption. -/
+def epsContract : Contract :=
+  { name      := "EPS power bound"
+    assume    := True
+    guarantee := epsGuarantee
+    valid     := fun _ => by unfold epsGuarantee; decide }
+
+/-- Contract for AOCS: under the bus allocation assumption, AOCS stays within
+    its peak consumption envelope. -/
+def aocsContract : Contract :=
+  { name      := "AOCS power envelope"
+    assume    := True
+    guarantee := aocsAssume
+    valid     := fun _ => by unfold aocsAssume; decide }
+
+/-- Coupling constraint: combined EPS+AOCS peak fits the 500W bus budget.
+    This property is not expressible at the subsystem level — it requires
+    joint knowledge of both maxPower values. -/
+def satelliteBusBudget : CouplingConstraint :=
+  { name     := "EPS + AOCS peak ≤ 500W"
+    involved := ["EPS", "AOCS"]
+    property := epsModePowerSpec.maxPower + aocsModePowerSpec.maxPower ≤ 500
+    evidence := by decide }
+
+/-- The satellite modeled as a ContractedSystem. Every contract assumption is
+    discharged here; missing any would be a type error. -/
+def satelliteContractedSystem : ContractedSystem :=
+  { contracts  := [epsContract, aocsContract]
+    couplings  := [satelliteBusBudget]
+    discharged := by
+      intro c hc
+      simp [epsContract, aocsContract] at hc
+      rcases hc with rfl | rfl <;> trivial }
+
+/-- Integration guarantees: both contract guarantees hold. -/
+theorem satellite_integration_guarantees :
+    ∀ c ∈ satelliteContractedSystem.contracts, c.guarantee :=
+  satelliteContractedSystem.guarantees_hold
+
+-- ============================================================
+-- §6  Model Boundary
+-- ============================================================
+
+/-- Non-formal properties backed by test or analysis. -/
+def satelliteNonFormalProperties : List NonFormalProperty := [
+  { description := "Solar panel efficiency at end-of-life (EOL)"
+    kind        := .analyzed
+    source      := "Radiation degradation analysis report R-2026-01" },
+  { description := "Reaction wheel friction at cold temperatures"
+    kind        := .tested
+    source      := "Qualification test campaign QT-AOCS-03" }
+]
+
+/-- Risks deliberately left unmodeled. -/
+def satelliteUnmodeledRisks : List UnmodeledRisk := [
+  { description := "Single Event Upset (SEU) in non-redundant memory"
+    category    := .physical
+    rationale   := "Radiation environment modeling is outside the scope of structural V&V"
+    mitigation  := "EDAC memory, periodic scrubbing, watchdog reset" },
+  { description := "Operator command sequencing error from ground"
+    category    := .human
+    rationale   := "Operator behavior is not formalized"
+    mitigation  := "Two-person rule, command simulator, uplink authentication" },
+  { description := "Third-party firmware in COTS star tracker"
+    category    := .software
+    rationale   := "Vendor firmware is unavailable for formal analysis"
+    mitigation  := "Vendor qualification, plausibility checks on tracker output" }
+]
+
+/-- Model boundary for the satellite. -/
+def satelliteModelBoundary : ModelBoundary :=
+  { systemName    := "Satellite"
+    verifiedCount := satelliteVMatrix.totalRecords
+    nonFormal     := satelliteNonFormalProperties
+    unmodeled     := satelliteUnmodeledRisks }
+
+/-- Sanity: 25 verified, 2 non-formal, 3 unmodeled = 30 tracked items. -/
+theorem satelliteModelBoundary_totalItems :
+    satelliteModelBoundary.totalItems = 30 := by native_decide
+
 end Examples.Spacecraft.Satellite

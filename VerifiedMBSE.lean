@@ -18,6 +18,8 @@ import VerifiedMBSE.VV.SubSystemSpec
 import VerifiedMBSE.VV.VVBundle
 import VerifiedMBSE.VV.Power
 import VerifiedMBSE.VV.Propagation
+import VerifiedMBSE.VV.Contract
+import VerifiedMBSE.VV.ModelBoundary
 
 -- Matrix: V-matrix construction
 import VerifiedMBSE.Matrix.VColumn

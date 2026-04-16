@@ -130,7 +130,9 @@ VerifiedMBSE/
 │   ├── SubSystemSpec.lean   #   StructuralSpec, BehavioralSpec, FDIRBundle, SubSystemSpec
 │   ├── VVBundle.lean        #   mkComponentRecord, SubSystemVVBundle, allRecords
 │   ├── Power.lean           #   ModePowerSpec, PowerBudgetOK₂
-│   └── Propagation.lean     #   LayerPropagation, compose
+│   ├── Propagation.lean     #   LayerPropagation, compose
+│   ├── Contract.lean        #   Contract, ContractedSystem, CouplingConstraint
+│   └── ModelBoundary.lean   #   ModelBoundary, UnmodeledRisk, RiskCategory
 │
 ├── Matrix/                  # V-matrix construction
 │   ├── VColumn.lean         #   VColumn, atLayer, Complete
@@ -170,6 +172,9 @@ Examples/Spacecraft/         # Full satellite case study (4 subsystems, 25 VVRec
 | `SubSystemSpec` | Structure + behavior + FDIR | One value = complete subsystem verification |
 | `VVRecord` | Machine proof + validation trace | The atomic unit of V&V evidence |
 | `VMatrix.Complete` | No gaps in the V-matrix | **The main theorem** — if it compiles, you're done |
+| `Contract` | Assume-guarantee pair with validity proof | Integration obligations become type errors when missing |
+| `ContractedSystem` | Contracts + coupling constraints, all discharged | Catches the "individually correct, jointly broken" failure mode |
+| `ModelBoundary` | Verified / tested / analyzed / unmodeled split | Makes "what the model does *not* cover" a first-class artifact |
 | `DesignSpace` | `PartDef / ComponentEquiv` quotient | Univalence: equivalent components are equal in design space |
 | `ua` / `ua_inv` | Equiv ↔ equality in `DesignSpace` | HoTT univalence via setoid quotient — sorry-free |
 
@@ -186,6 +191,7 @@ Examples/Spacecraft/         # Full satellite case study (4 subsystems, 25 VVRec
 - **[API Reference](https://chantakan.github.io/verified-mbse/)** — doc-gen4 generated (auto-deployed via GitHub Pages)
 - **[Architecture Guide](docs/Architecture.md)** — Type-theoretic foundations, design decisions, proof patterns
 - **[Tutorial: Adding a New Subsystem](docs/Tutorial.md)** — Step-by-step walkthrough
+- **[Roadmap](docs/Roadmap.md)** — Implemented, deferred, and candidate future improvements
 
 ## Requirements
 
@@ -196,9 +202,9 @@ Examples/Spacecraft/         # Full satellite case study (4 subsystems, 25 VVRec
 
 | | Files | Lines | sorry |
 |---|---|---|---|
-| Library | 28 | 2,582 | 0 |
-| Examples | 6 | 2,440 | 0 |
-| **Total** | **34** | **5,022** | **0** |
+| Library | 30 | 2,878 | 0 |
+| Examples | 6 | 2,536 | 0 |
+| **Total** | **36** | **5,414** | **0** |
 
 ## License
 
