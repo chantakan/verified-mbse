@@ -21,8 +21,8 @@ import VerifiedMBSE.Behavior.ProductTemporal
 -- VV: Verification & Validation
 import VerifiedMBSE.VV.Layer
 import VerifiedMBSE.VV.Evidence
-import VerifiedMBSE.VV.SubSystemSpec
-import VerifiedMBSE.VV.ProductFDIR
+import VerifiedMBSE.VV.SubSystemSpec              -- B-6: FDIRBundle を ToKripke ベースに一般化
+import VerifiedMBSE.VV.ProductFDIR                -- B-6: FDIRBundle.compose が FDIRBundle psm を返す
 import VerifiedMBSE.VV.VVBundle
 import VerifiedMBSE.VV.Power
 import VerifiedMBSE.VV.Propagation
@@ -66,8 +66,10 @@ checking.
   (積状態機械の到達可能性), `ProductKripke` (B-4 新規: 積の ToKripke instance),
   `ProductTemporal` (`Always_prod` 等の後方互換エイリアス + 持ち上げ補題) を含む。
 - **VV** — `StructuralSpec` / `BehavioralSpec` / `FDIRBundle` / `SubSystemSpec`
-  による統合仕様、`ProductFDIRBundle` による並列合成、evidence 付き
-  `ValidationTrace`、`ModelBoundary`。
+  による統合仕様、evidence 付き `ValidationTrace`、`ModelBoundary`。
+  B-6 により `FDIRBundle` は `ToKripke α S D` ベースに一般化され、
+  `FDIRBundle sm` / `FDIRBundle psm` が同一型で扱える。旧 `ProductFDIRBundle`
+  は削除され、`FDIRBundle.compose` は `FDIRBundle psm` を返す並列合成関数。
 - **Matrix** — `VColumn` / `VMatrix` による V&V マトリクス、完全性定理、
   `VMatrix` に依存型紐付けされた `ModelBoundary`。
 - **Output** — SysML v2 テキスト記法、Markdown テーブル、端末表示。
@@ -76,7 +78,7 @@ checking.
 
 ## Roadmap (F4.5: Kripke Unification)
 
-B-1 (KripkeStructure + ToKripke 導入)・B-4 (ProductStateMachine 統合) を完了。
-以降 B-6 (`ProductFDIRBundle` を `FDIRBundle` に合流)、B-7 (`SubSystemSpec` の
-Kripke 一般化 + N機合成) と段階的に進める。
+B-1 (KripkeStructure + ToKripke 導入)・B-4 (ProductStateMachine 統合)・
+B-6 (`ProductFDIRBundle` を `FDIRBundle` に合流) を完了。
+以降 B-7 (`SubSystemSpec` の Kripke 一般化 + N機合成) と段階的に進める。
 -/

@@ -2,17 +2,26 @@ import VerifiedMBSE.VV.SubSystemSpec
 import VerifiedMBSE.Behavior.ProductTemporal
 
 /-!
-# Product FDIR Bundle
+# FDIRBundle Parallel Composition
 
-積状態機械上の FDIR 要件束と、各要素 `FDIRBundle` の並列合成 `FDIRBundle.compose`
-を定義する。`ProductStateMachine` / `Always_prod` / `Eventually_prod` / `Leads_prod` /
-`.of_left` / `.of_right` といった積 LTL 基盤を Behavior 層から利用する。
+積状態機械 `ProductStateMachine sm₁ sm₂` 上の統一 `FDIRBundle` を、
+各要素 `FDIRBundle sm₁` / `FDIRBundle sm₂` の並列合成として構築する
+`FDIRBundle.compose` を定義する。
+
+## B-6: ProductFDIRBundle との合流
+
+以前は `ProductFDIRBundle` という独立した構造体を並列定義していたが、
+B-1 で導入した `ToKripke` 型クラス経由の統一 `Always / Eventually / Leads`
+と、B-4 で追加した `ProductStateMachine` に対する `ToKripke` instance により、
+`FDIRBundle psm` として `VV/SubSystemSpec.lean` の `FDIRBundle` に合流した。
+旧 `ProductFDIRBundle psm F R Sa` は `FDIRBundle psm`（`isFault` 等は**フィールド**）
+に置き換える。
 
 ## 合成の意味論
 
 - `isFault    := f₁.isFault p.1 ∨ f₂.isFault p.2`   — どちらかが fault
 - `isRecovery := f₁.isRecovery p.1 ∨ f₂.isRecovery p.2` — どちらかが recovery
-- `isSafe    := f₁.isSafe q.1 ∧ f₂.isSafe q.2`      — 両方 safe
+- `isSafe     := f₁.isSafe q.1 ∧ f₂.isSafe q.2`      — 両方 safe
 
 ### `isRecovery` に `∨` を採用する設計判断
 
@@ -25,14 +34,7 @@ nominal 状態で静止しているため「両方同時に recovery モード�
 `Leads_prod.of_left` / `.of_right` から素直に構成でき、かつ「fault を起こした
 側は必ず recovery する」という実用上の要求を満たす。より厳しい recovery 定義
 （例: 両方同時 recovery、同期遷移を伴う）が必要なユースケースでは、ユーザ側で
-`ProductFDIRBundle` を直接構築する設計とした。
-
-## 将来の型クラス化 (F9)
-
-`ProductFDIRBundle` と通常の `FDIRBundle` が並行する二本立て API になっている
-が、F9 で導入予定の `LTLStructure` 型クラスで `StateMachine` と
-`ProductStateMachine` を統一的に扱えるようにすると、両者を `FDIRBundle M` の
-ように一本化できる見込み。
+`FDIRBundle psm` を直接構築する設計とした。
 -/
 
 namespace VerifiedMBSE.VV
@@ -40,36 +42,13 @@ namespace VerifiedMBSE.VV
 open VerifiedMBSE.Behavior
 
 -- ============================================================
--- §1  ProductFDIRBundle
--- ============================================================
-
-/-- 積状態機械上の FDIR 要件束。
-
-    通常の `FDIRBundle sm` が `StateMachine sm` の上に載るのに対し、こちらは
-    `ProductStateMachine sm₁ sm₂` の上に載る。意味論は `Always_prod` /
-    `Eventually_prod` / `Leads_prod` で与えられ、射影・持ち上げ補題を通じて
-    個別 `FDIRBundle` の保証から合成可能。 -/
-structure ProductFDIRBundle
-    {S₁ D₁ : Type} {inv₁ : S₁ → D₁ → Prop}
-    {S₂ D₂ : Type} {inv₂ : S₂ → D₂ → Prop}
-    {sm₁ : StateMachine S₁ D₁ inv₁} {sm₂ : StateMachine S₂ D₂ inv₂}
-    (psm : ProductStateMachine sm₁ sm₂)
-    (isFault    : S₁ × S₂ → Prop)
-    (isRecovery : S₁ × S₂ → Prop)
-    (isSafe     : D₁ × D₂ → Prop) :
-    Prop where
-  /-- R1 Safety: □(isSafe q) -/
-  safety    : Always_prod psm (fun _ q => isSafe q)
-  /-- R2 Fault detection: ◇(isFault p) -/
-  detection : Eventually_prod psm (fun p _ => isFault p)
-  /-- R3 Fault recovery: □(isFault p → ◇(isRecovery p')) -/
-  recovery  : Leads_prod psm (fun p _ => isFault p) (fun p _ => isRecovery p)
-
--- ============================================================
--- §2  FDIRBundle.compose
+-- §1  FDIRBundle.compose
 -- ============================================================
 
 /-- 2 つの `FDIRBundle` の並列合成。
+
+    戻り値は積状態機械 `psm : ProductStateMachine sm₁ sm₂` 上の統一 `FDIRBundle psm`
+    （旧 `ProductFDIRBundle` 相当）。
 
     構成:
     - `safety`    ← `Always_prod.of_and` で両 safety を積の合取にまとめる
@@ -83,10 +62,10 @@ def FDIRBundle.compose
     (f₁ : FDIRBundle sm₁) (f₂ : FDIRBundle sm₂)
     (psm : ProductStateMachine sm₁ sm₂)
     (hwf₁ : sm₁.WellFormed) (hwf₂ : sm₂.WellFormed) :
-    ProductFDIRBundle psm
-      (fun p => f₁.isFault p.1 ∨ f₂.isFault p.2)
-      (fun p => f₁.isRecovery p.1 ∨ f₂.isRecovery p.2)
-      (fun q => f₁.isSafe q.1 ∧ f₂.isSafe q.2) where
+    FDIRBundle psm where
+  isFault    := fun p => f₁.isFault p.1 ∨ f₂.isFault p.2
+  isRecovery := fun p => f₁.isRecovery p.1 ∨ f₂.isRecovery p.2
+  isSafe     := fun q => f₁.isSafe q.1 ∧ f₂.isSafe q.2
   safety := Always_prod.of_and psm f₁.safety f₂.safety
   detection := by
     -- 左の detection を持ち上げて Or.inl

@@ -8,6 +8,14 @@ import VerifiedMBSE.VV.Evidence
 `StructuralSpec`（構造）、`BehavioralSpec`（行動）、
 `FDIRBundle`（FDIR の証明束）、およびこれら3つを統合した
 `SubSystemSpec` を定義する。
+
+## B-6: FDIRBundle の一般化
+
+`FDIRBundle` は `ToKripke α S D` 型クラスベースの統一 API 上に構築される。
+これにより `FDIRBundle sm`（`sm : StateMachine _ _ _`）と
+`FDIRBundle psm`（`psm : ProductStateMachine sm₁ sm₂`）が同一の構造体型で
+扱える。旧 `ProductFDIRBundle` はこの一般化された `FDIRBundle` に合流済み
+（`VV/ProductFDIR.lean` 参照）。
 -/
 
 namespace VerifiedMBSE.VV
@@ -66,13 +74,22 @@ structure BehavioralSpec (S : Type) (D : Type) (inv : S → D → Prop) where
   wellFormed : sm.WellFormed
 
 -- ============================================================
--- §3  FDIRBundle
+-- §3  FDIRBundle (Unified via ToKripke)
 -- ============================================================
 
-/-- FDIRBundle: FDIR 要件の証明束。 -/
+/-- FDIRBundle: FDIR 要件の証明束（統一版）。
+
+    `ToKripke α S D` 型クラス経由で意味論が与えられるため、`x : α` として
+    `StateMachine S D inv` や `ProductStateMachine sm₁ sm₂` を直接渡せる。
+
+    - `FDIRBundle sm` (sm : StateMachine S D inv) — 単一サブシステムの FDIR
+    - `FDIRBundle psm` (psm : ProductStateMachine sm₁ sm₂) — 合成サブシステムの FDIR
+
+    旧 `ProductFDIRBundle` はこの型に合流済み（B-6）。合成された `FDIRBundle` の
+    構築方法は `VV/ProductFDIR.lean` の `FDIRBundle.compose` を参照。 -/
 structure FDIRBundle
-    {S D : Type} {inv : S → D → Prop}
-    (sm : StateMachine S D inv) where
+    {α : Type} {S D : Type} [ToKripke α S D]
+    (x : α) where
   /-- fault 状態の述語 -/
   isFault : S → Prop
   /-- recovery 状態の述語 -/
@@ -80,13 +97,17 @@ structure FDIRBundle
   /-- データの safety 条件 -/
   isSafe : D → Prop
   /-- R1: Safety □(isSafe d) -/
-  safety : Always sm (fun _ d => isSafe d)
+  safety : Always x (fun _ d => isSafe d)
   /-- R2: Fault detection ◇(isFault s) -/
-  detection : Eventually sm (fun s _ => isFault s)
+  detection : Eventually x (fun s _ => isFault s)
   /-- R3: Fault recovery □(isFault → ◇ isRecovery) -/
-  recovery : Leads sm (fun s _ => isFault s) (fun s _ => isRecovery s)
+  recovery : Leads x (fun s _ => isFault s) (fun s _ => isRecovery s)
 
-/-- FDIRBundle から FDIRSpec への変換。 -/
+/-- FDIRBundle から FDIRSpec への変換。
+
+    `FDIRSpec` は現状 `StateMachine` 上にのみ定義されているため、この変換は
+    `StateMachine` 版の `FDIRBundle` に対してのみ意味を持つ。積状態機械上の
+    `FDIRBundle` は `.isFault` / `.safety` 等のフィールドを直接利用すればよい。 -/
 def FDIRBundle.toFDIRSpec
     {S D : Type} {inv : S → D → Prop}
     {sm : StateMachine S D inv}
