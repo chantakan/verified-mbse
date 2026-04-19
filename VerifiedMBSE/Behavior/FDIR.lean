@@ -1,5 +1,6 @@
 import VerifiedMBSE.Core.Interpretation
 import VerifiedMBSE.Behavior.Temporal
+import VerifiedMBSE.Behavior.StateMachineKripke
 
 /-!
 # FDIR Specification and StateMachineComponent
@@ -7,6 +8,12 @@ import VerifiedMBSE.Behavior.Temporal
 Defines `FDIRSpec` (a bundle of safety, detection, and recovery requirements)
 and `StateMachineComponent`, which integrates structural (`PartDef`) and
 behavioral (`StateMachine`) models into a single verified component.
+
+## Note on Import
+
+`StateMachineKripke` をインポートする理由: `Always sm P` / `Eventually sm P` /
+`Leads sm P Q` の形の呼び出しが、`KripkeStructure` 版 LTL API に
+`StateMachine → KripkeStructure` の coerce 経由で流れるようにするため。
 -/
 
 namespace VerifiedMBSE.Behavior

@@ -145,7 +145,7 @@ theorem satellite_integration_guarantees :
 -- §6  Model Boundary
 -- ============================================================
 
-/-- Non-formal properties backed by test or analysis. -/
+/-- 試験・解析で裏付けられた非形式性質。 -/
 def satelliteNonFormalProperties : List NonFormalProperty := [
   { description := "Solar panel efficiency at end-of-life (EOL)"
     kind        := .analyzed
@@ -155,7 +155,7 @@ def satelliteNonFormalProperties : List NonFormalProperty := [
     source      := "Qualification test campaign QT-AOCS-03" }
 ]
 
-/-- Risks deliberately left unmodeled. -/
+/-- 意図的に形式化しない残留リスク。 -/
 def satelliteUnmodeledRisks : List UnmodeledRisk := [
   { description := "Single Event Upset (SEU) in non-redundant memory"
     category    := .physical
@@ -171,14 +171,16 @@ def satelliteUnmodeledRisks : List UnmodeledRisk := [
     mitigation  := "Vendor qualification, plausibility checks on tracker output" }
 ]
 
-/-- Model boundary for the satellite. -/
-def satelliteModelBoundary : ModelBoundary :=
-  { systemName    := "Satellite"
-    verifiedCount := satelliteVMatrix.totalRecords
-    nonFormal     := satelliteNonFormalProperties
-    unmodeled     := satelliteUnmodeledRisks }
+/-- 衛星のモデル境界。F6 により `ModelBoundary satelliteVMatrix` に依存型化
+    されたため、他システム用の境界記述を誤って流用するとここで型エラーになる。
+    `verifiedCount` は `satelliteVMatrix.totalRecords` から自動導出されるので
+    手動同期は不要。 -/
+def satelliteModelBoundary : ModelBoundary satelliteVMatrix :=
+  { systemName := "Satellite"
+    nonFormal  := satelliteNonFormalProperties
+    unmodeled  := satelliteUnmodeledRisks }
 
-/-- Sanity: 25 verified, 2 non-formal, 3 unmodeled = 30 tracked items. -/
+/-- 健全性: 25 verified + 2 non-formal + 3 unmodeled = 30 tracked items. -/
 theorem satelliteModelBoundary_totalItems :
     satelliteModelBoundary.totalItems = 30 := by native_decide
 

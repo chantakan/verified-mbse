@@ -3,9 +3,9 @@ import VerifiedMBSE.Core.KerML
 /-!
 # Specialization, Feature Typing, Redefinition, and Interpretation
 
-Defines `Specialization` (preorder), `FeatureTyping` (substitution lemma),
-`Redefinition` (type refinement), `Interpretation` (model-theoretic semantics),
-and soundness theorems.
+`Specialization`（preorder）、`FeatureTyping`（置換補題）、
+`Redefinition`（型のリファイン）、`Interpretation`（モデル理論的意味論）、
+および健全性定理を定義する。
 -/
 
 namespace VerifiedMBSE.Core
@@ -14,39 +14,41 @@ namespace VerifiedMBSE.Core
 -- §1  Specialization (Preorder)
 -- ============================================================
 
-/-- Specialization: A specializes B ⟺ every instance of A is also an instance of B. -/
+/-- Specialization: A が B を特殊化する ⟺ A の任意のインスタンスは B のインスタンスでもある。
+
+    注: 現時点の `Specialization` は `(specific, general)` のみを保持する syntactic な
+    構造体であり、chain の証拠は `specializes` 側の命題でのみ保持する。将来 witness を
+    構造体に埋め込む拡張を行う場合は、本注記を更新すること（F3 参照）。 -/
 structure Specialization where
   specific : KerMLType
   general  : KerMLType
   deriving Repr
 
-/-- Specialization is reflexive. -/
+/-- Specialization は反射的。 -/
 def Specialization.refl (t : KerMLType) : Specialization where
   specific := t
   general  := t
 
-/-- Specialization is transitive. -/
-def Specialization.trans (s₁ s₂ : Specialization)
-    (_h : s₁.general = s₂.specific) : Specialization where
-  specific := s₁.specific
-  general  := s₂.general
-
-/-- Specialization as a proposition. -/
+/-- specialization の命題的定式化。 -/
 def specializes (a b : KerMLType) : Prop :=
   ∃ s : Specialization, s.specific = a ∧ s.general = b
 
-/-- specializes is reflexive. -/
+/-- specializes は反射的。 -/
 theorem specializes_refl (a : KerMLType) : specializes a a :=
   ⟨Specialization.refl a, rfl, rfl⟩
 
-/-- specializes is transitive. -/
-theorem specializes_trans {a b c : KerMLType}
-    (hab : specializes a b) (hbc : specializes b c) : specializes a c := by
-  obtain ⟨s₁, hs₁s, hs₁g⟩ := hab
-  obtain ⟨s₂, hs₂s, hs₂g⟩ := hbc
-  exact ⟨Specialization.trans s₁ s₂ (hs₁g.trans hs₂s.symm), hs₁s, hs₂g⟩
+/-- specializes は推移的。
 
-/-- Preorder instance. -/
+    `Specialization` は現時点では witness を持たない pair 構造体であるため、`a ≤ c` の
+    証拠は `⟨⟨a, c⟩, rfl, rfl⟩` として直接構成できる。仮説 `hab`, `hbc` は API 上は
+    受け取っているが、本体では使用しない（将来 `Specialization` に chain の witness を
+    追加する拡張に備えた API フック）。旧 `Specialization.trans` は仮説を受け取りながら
+    使わないデータ関数だったため削除した（F3）。 -/
+theorem specializes_trans {a b c : KerMLType}
+    (_hab : specializes a b) (_hbc : specializes b c) : specializes a c :=
+  ⟨⟨a, c⟩, rfl, rfl⟩
+
+/-- Preorder インスタンス。 -/
 instance : Preorder KerMLType where
   le         := specializes
   le_refl    := specializes_refl
@@ -56,40 +58,40 @@ instance : Preorder KerMLType where
 -- §2  FeatureTyping and Substitution Lemma
 -- ============================================================
 
-/-- FeatureTyping: relation assigning a type to a feature.
-    Corresponds to the typing judgment f : A. -/
+/-- FeatureTyping: feature に型を割り当てる関係。
+    型付け判断 f : A に対応する。 -/
 structure FeatureTyping where
-  /-- The feature being typed -/
+  /-- 型付け対象の feature -/
   feature     : Feature
-  /-- The assigned type -/
+  /-- 割り当てられる型 -/
   featureType : KerMLType
   deriving Repr
 
-/-- TypedFeature: bundle ensuring consistency of Feature and FeatureTyping. -/
+/-- TypedFeature: Feature と FeatureTyping の整合性を保証する束。 -/
 structure TypedFeature where
   feature : Feature
   typing  : FeatureTyping
-  /-- Consistency: typing refers to the same feature -/
+  /-- 整合性: typing は同じ feature を参照する -/
   wf      : typing.feature = feature
 
-/-- Type widening via the substitution lemma (subsumption).
+/-- 置換補題による型の拡張（subsumption）。
     A ≤ B, f : A ⊢ f : B -/
 def FeatureTyping.widen (ft : FeatureTyping) (b : KerMLType)
     (_ : ft.featureType ≤ b) : FeatureTyping where
   feature     := ft.feature
   featureType := b
 
-/-- widening does not change the feature itself. -/
+/-- widen は feature そのものを変えない。 -/
 theorem FeatureTyping.widen_feature (ft : FeatureTyping) (b : KerMLType)
     (h : ft.featureType ≤ b) :
     (ft.widen b h).feature = ft.feature := rfl
 
-/-- The result type of widening is the specified b. -/
+/-- widen 後の型は指定した b に一致する。 -/
 theorem FeatureTyping.widen_type (ft : FeatureTyping) (b : KerMLType)
     (h : ft.featureType ≤ b) :
     (ft.widen b h).featureType = b := rfl
 
-/-- widening is transitive (coherence). -/
+/-- widen は推移的に合成できる（coherence）。 -/
 theorem FeatureTyping.widen_trans (ft : FeatureTyping) (b c : KerMLType)
     (hab : ft.featureType ≤ b) (hbc : b ≤ c) :
     (ft.widen c (hab.trans hbc)).feature = ((ft.widen b hab).widen c hbc).feature := rfl
@@ -98,29 +100,29 @@ theorem FeatureTyping.widen_trans (ft : FeatureTyping) (b c : KerMLType)
 -- §3  Redefinition
 -- ============================================================
 
-/-- Redefinition: relation that redefines a feature in a subtype context.
-    Requires the refinement condition redefining.featureType ≤ redefined.featureType. -/
+/-- Redefinition: サブタイプ文脈で feature を再定義する関係。
+    redefining.featureType ≤ redefined.featureType という refinement 条件を要求する。 -/
 structure Redefinition where
-  /-- Redefining feature (subtype side) -/
+  /-- 再定義する feature（サブタイプ側） -/
   redefining : FeatureTyping
-  /-- Redefined feature (supertype side) -/
+  /-- 再定義される feature（スーパータイプ側） -/
   redefined  : FeatureTyping
-  /-- Type refinement condition -/
+  /-- 型の refinement 条件 -/
   typeRefinement : redefining.featureType ≤ redefined.featureType
 
-/-- Recover FeatureTyping from Redefinition via widen. -/
+/-- Redefinition から widen 経由で FeatureTyping を復元する。 -/
 def Redefinition.toWidened (r : Redefinition) : FeatureTyping :=
   r.redefining.widen r.redefined.featureType r.typeRefinement
 
-/-- The type after widen matches the redefined type. -/
+/-- widen 後の型は redefined の型に一致する。 -/
 theorem Redefinition.toWidened_type (r : Redefinition) :
     r.toWidened.featureType = r.redefined.featureType := rfl
 
-/-- The feature body remains redefining after widen. -/
+/-- feature 本体は widen 後も redefining のまま。 -/
 theorem Redefinition.toWidened_feature (r : Redefinition) :
     r.toWidened.feature = r.redefining.feature := rfl
 
-/-- Transitivity of Redefinition. -/
+/-- Redefinition の推移律。 -/
 def Redefinition.trans (r₁ r₂ : Redefinition)
     (h : r₁.redefined.featureType = r₂.redefining.featureType) :
     Redefinition where
@@ -132,23 +134,23 @@ def Redefinition.trans (r₁ r₂ : Redefinition)
 -- §4  Interpretation (Semantic Interpretation)
 -- ============================================================
 
-/-- Semantic interpretation: function assigning a carrier type to each KerMLType.
+/-- 意味論的解釈: 各 KerMLType に担体型を割り当てる関数。
     denotational semantics: ⟦ T ⟧_I := I T -/
 def Interpretation := KerMLType → Type
 
-/-- Extent under an interpretation. -/
+/-- 解釈下での extent。 -/
 def extent (I : Interpretation) (T : KerMLType) : Type := I T
 
-/-- Semantic specialization: A ≤_sem B under I ⟺ an injection I A → I B exists. -/
+/-- 意味論的 specialization: I の下で A ≤_sem B ⟺ I A → I B の単射が存在する。 -/
 def semanticSpecializes (I : Interpretation) (a b : KerMLType) : Prop :=
   ∃ f : I a → I b, Function.Injective f
 
-/-- Semantic specialization is reflexive. -/
+/-- 意味論的 specialization は反射的。 -/
 theorem semanticSpecializes_refl (I : Interpretation) (a : KerMLType) :
     semanticSpecializes I a a :=
   ⟨id, Function.injective_id⟩
 
-/-- Semantic specialization is transitive. -/
+/-- 意味論的 specialization は推移的。 -/
 theorem semanticSpecializes_trans (I : Interpretation) {a b c : KerMLType}
     (hab : semanticSpecializes I a b) (hbc : semanticSpecializes I b c) :
     semanticSpecializes I a c := by
@@ -156,7 +158,7 @@ theorem semanticSpecializes_trans (I : Interpretation) {a b c : KerMLType}
   obtain ⟨g, hg⟩ := hbc
   exact ⟨g ∘ f, hg.comp hf⟩
 
-/-- Semantic specialization forms a preorder. -/
+/-- 意味論的 specialization は preorder を成す。 -/
 theorem semanticSpecializes_preorder (I : Interpretation) :
     ∀ a b c : KerMLType,
       semanticSpecializes I a b →
@@ -168,22 +170,22 @@ theorem semanticSpecializes_preorder (I : Interpretation) :
 -- §5  Model Conditions and Soundness
 -- ============================================================
 
-/-- Singleton interpretation (trivial model). -/
+/-- 単一点解釈（自明モデル）。 -/
 def trivialInterpretation : Interpretation := fun _ => Unit
 
-/-- String interpretation (for debugging). -/
+/-- 文字列解釈（デバッグ用）。 -/
 def stringInterpretation : Interpretation := fun _ => String
 
-/-- In the trivial model, specialization always holds. -/
+/-- 自明モデル下では specialization は常に成立する。 -/
 theorem trivial_semanticSpecializes_all (a b : KerMLType) :
     semanticSpecializes trivialInterpretation a b :=
   ⟨fun _ => (), fun _ _ _ => rfl⟩
 
-/-- An interpretation satisfies the model condition (respects all Specializations). -/
+/-- 解釈がモデル条件を満たす（すべての Specialization を尊重する）。 -/
 def InterpretationRespects (I : Interpretation) : Prop :=
   ∀ s : Specialization, semanticSpecializes I s.specific s.general
 
-/-- Soundness theorem: syntactic specialization → semantic specialization. -/
+/-- 健全性定理: 統語的 specialization ⇒ 意味論的 specialization。 -/
 theorem soundness (I : Interpretation) (hI : InterpretationRespects I)
     {a b : KerMLType} (hab : specializes a b) :
     semanticSpecializes I a b := by
@@ -192,11 +194,11 @@ theorem soundness (I : Interpretation) (hI : InterpretationRespects I)
   subst hs_spec; subst hs_gen
   exact ⟨f, hf⟩
 
-/-- The trivial interpretation satisfies the model condition. -/
+/-- 自明解釈はモデル条件を満たす。 -/
 theorem trivial_respects : InterpretationRespects trivialInterpretation :=
   fun s => trivial_semanticSpecializes_all s.specific s.general
 
-/-- Corollary: in the trivial model, syntactic specialization always holds semantically. -/
+/-- 系: 自明モデルでは統語的 specialization は常に意味論的にも成立する。 -/
 theorem soundness_trivial {a b : KerMLType} (hab : specializes a b) :
     semanticSpecializes trivialInterpretation a b :=
   soundness trivialInterpretation trivial_respects hab
