@@ -161,15 +161,17 @@ theorem epsSM_satisfies_FDIR :
     recovery  := eps_fault_leads_to_lowPower }
 
 -- ============================================================
--- §4  SubSystemSpec
+-- §4  SubSystemSpec (B-7: Kripke-generalized)
 -- ============================================================
 
 def epsStructural : StructuralSpec :=
   StructuralSpec.mk' "EPS" [PowerSupply, Load] [powerConnector]
     EPSSystem_WellFormed
 
-def epsBehavioral : BehavioralSpec EPSMode Nat epsGlobalInv :=
-  { sm := epsSM, wellFormed := epsSM_WellFormed }
+/-- EPS の BehavioralSpec（B-7: Kripke 一般化後）。
+    `nonEmpty` は `StateMachine.WellFormed.nonEmpty` で `epsSM_WellFormed` から変換。 -/
+def epsBehavioral : BehavioralSpec epsSM :=
+  { nonEmpty := epsSM_WellFormed.nonEmpty }
 
 def epsFDIR : FDIRBundle epsSM :=
   { isFault    := fun s => s = .fault
@@ -179,8 +181,8 @@ def epsFDIR : FDIRBundle epsSM :=
     detection  := eps_eventually_fault
     recovery   := eps_fault_leads_to_lowPower }
 
-/-- EPS の SubSystemSpec -/
-def epsSpec : SubSystemSpec EPSMode Nat epsGlobalInv :=
+/-- EPS の SubSystemSpec（B-7: `SubSystemSpec epsSM` 形式）。 -/
+def epsSpec : SubSystemSpec epsSM :=
   { structural := epsStructural
     behavioral := epsBehavioral
     fdir       := epsFDIR }

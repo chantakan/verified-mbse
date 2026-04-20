@@ -5,11 +5,18 @@ import VerifiedMBSE.VV.SubSystemSpec
 
 Defines `mkComponentRecord` and `SubSystemVVBundle`, which batch-construct
 `VVRecord`s from a `SubSystemSpec`.
+
+## B-7: Kripke 一般化
+
+`SubSystemSpec` の Kripke 一般化に伴い、`SubSystemVVBundle` もその型引数を
+`x : α` ベースに一般化した。StateMachine 版も ProductStateMachine 版も同じ
+`SubSystemVVBundle` 型で扱える。
 -/
 
 namespace VerifiedMBSE.VV
 
 open VerifiedMBSE.Core
+open VerifiedMBSE.Behavior
 
 -- ============================================================
 -- §1  Component-Level VVRecord
@@ -30,13 +37,17 @@ def mkComponentRecord
     validation   := ValidationTrace.init (.trusted proof) }
 
 -- ============================================================
--- §2  SubSystemVVBundle
+-- §2  SubSystemVVBundle (Kripke-Generalized)
 -- ============================================================
 
-/-- SubSystemVVBundle: bundle of VVRecords constructed from a SubSystemSpec. -/
+/-- SubSystemVVBundle: bundle of VVRecords constructed from a SubSystemSpec.
+
+    B-7 で `SubSystemSpec` が Kripke 一般化されたため、本構造の implicit
+    型引数も `{α : Type} {S D : Type} [ToKripke α S D] {x : α}` に変更された。
+    StateMachine 版・ProductStateMachine 版の両方に対応する。 -/
 structure SubSystemVVBundle
-    {S D : Type} {inv : S → D → Prop}
-    (spec : SubSystemSpec S D inv) where
+    {α : Type} {S D : Type} [ToKripke α S D]
+    {x : α} (spec : SubSystemSpec x) where
   /-- List of component-level VVRecords -/
   componentRecords : List VVRecord
   /-- Additional system-level VVRecords (e.g. power budget) -/
@@ -44,8 +55,8 @@ structure SubSystemVVBundle
 
 /-- Get all VVRecords. -/
 def SubSystemVVBundle.allRecords
-    {S D : Type} {inv : S → D → Prop}
-    {spec : SubSystemSpec S D inv}
+    {α : Type} {S D : Type} [ToKripke α S D]
+    {x : α} {spec : SubSystemSpec x}
     (bundle : SubSystemVVBundle spec) :
     List VVRecord :=
   bundle.componentRecords
@@ -55,8 +66,8 @@ def SubSystemVVBundle.allRecords
 
 /-- Theorem on VVRecord count. -/
 theorem SubSystemVVBundle.allRecords_length
-    {S D : Type} {inv : S → D → Prop}
-    {spec : SubSystemSpec S D inv}
+    {α : Type} {S D : Type} [ToKripke α S D]
+    {x : α} {spec : SubSystemSpec x}
     (bundle : SubSystemVVBundle spec) :
     bundle.allRecords.length =
     bundle.componentRecords.length + 3 + bundle.extraSystemRecords.length := by

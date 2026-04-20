@@ -15,14 +15,14 @@ import VerifiedMBSE.Behavior.StateMachineLTL     -- B-1: Next / Until (StateMach
 import VerifiedMBSE.Behavior.FDIR
 -- 積状態機械 (B-4 で KripkeStructure ベースに統合)
 import VerifiedMBSE.Behavior.Product
-import VerifiedMBSE.Behavior.ProductKripke        -- B-4 新規: ToKripke instance for ProductStateMachine
+import VerifiedMBSE.Behavior.ProductKripke        -- B-4: ToKripke instance for ProductStateMachine
 import VerifiedMBSE.Behavior.ProductTemporal
 
 -- VV: Verification & Validation
 import VerifiedMBSE.VV.Layer
 import VerifiedMBSE.VV.Evidence
-import VerifiedMBSE.VV.SubSystemSpec              -- B-6: FDIRBundle を ToKripke ベースに一般化
-import VerifiedMBSE.VV.ProductFDIR                -- B-6: FDIRBundle.compose が FDIRBundle psm を返す
+import VerifiedMBSE.VV.SubSystemSpec              -- B-6/B-7: FDIRBundle/BehavioralSpec/SubSystemSpec を ToKripke ベースに一般化
+import VerifiedMBSE.VV.ProductFDIR                -- B-6/B-7: FDIRBundle.compose, BehavioralSpec.compose, SubSystemSpec.compose
 import VerifiedMBSE.VV.VVBundle
 import VerifiedMBSE.VV.Power
 import VerifiedMBSE.VV.Propagation
@@ -63,13 +63,14 @@ checking.
   の共通意味論基盤で、`ToKripke` 型クラスを通して `StateMachine` /
   `ProductStateMachine` / 連続時間系などが同一 API を共有する。`Next` / `Until` は
   遷移構造に依存するため `StateMachineLTL` に分離。`FDIR`, `Product`
-  (積状態機械の到達可能性), `ProductKripke` (B-4 新規: 積の ToKripke instance),
+  (積状態機械の到達可能性), `ProductKripke` (積の ToKripke instance),
   `ProductTemporal` (`Always_prod` 等の後方互換エイリアス + 持ち上げ補題) を含む。
 - **VV** — `StructuralSpec` / `BehavioralSpec` / `FDIRBundle` / `SubSystemSpec`
   による統合仕様、evidence 付き `ValidationTrace`、`ModelBoundary`。
-  B-6 により `FDIRBundle` は `ToKripke α S D` ベースに一般化され、
-  `FDIRBundle sm` / `FDIRBundle psm` が同一型で扱える。旧 `ProductFDIRBundle`
-  は削除され、`FDIRBundle.compose` は `FDIRBundle psm` を返す並列合成関数。
+  B-6/B-7 により `FDIRBundle` / `BehavioralSpec` / `SubSystemSpec` は
+  `ToKripke α S D` ベースに一般化され、`SubSystemSpec sm` / `SubSystemSpec psm`
+  が同一構造体型で扱える。並列合成は `SubSystemSpec.compose` で、
+  N 機はそのネストで実現する。
 - **Matrix** — `VColumn` / `VMatrix` による V&V マトリクス、完全性定理、
   `VMatrix` に依存型紐付けされた `ModelBoundary`。
 - **Output** — SysML v2 テキスト記法、Markdown テーブル、端末表示。
@@ -79,6 +80,7 @@ checking.
 ## Roadmap (F4.5: Kripke Unification)
 
 B-1 (KripkeStructure + ToKripke 導入)・B-4 (ProductStateMachine 統合)・
-B-6 (`ProductFDIRBundle` を `FDIRBundle` に合流) を完了。
-以降 B-7 (`SubSystemSpec` の Kripke 一般化 + N機合成) と段階的に進める。
+B-6 (`ProductFDIRBundle` → `FDIRBundle` 合流)・B-7 (`SubSystemSpec` の
+Kripke 一般化 + 2機合成) を完了。以降 B-8 (型クラスベースの可変長 N 機合成
+API)、連続時間系への拡張 (F10) と段階的に進める。
 -/

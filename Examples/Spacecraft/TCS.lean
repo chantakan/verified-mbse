@@ -625,11 +625,10 @@ def tcsStructural : StructuralSpec :=
 theorem tcsStructural_system_eq :
     tcsStructural.system = TCSSystem := rfl
 
-/-- TCS の BehavioralSpec.
+/-- TCS の BehavioralSpec（B-7: Kripke 一般化後）。
     tcsSM: 4 モード, 8 遷移. -/
-def tcsBehavioral : BehavioralSpec TCSMode Nat tcsInvariant :=
-  { sm := tcsSM
-    wellFormed := tcsSM_WellFormed }
+def tcsBehavioral : BehavioralSpec tcsSM :=
+  { nonEmpty := tcsSM_WellFormed.nonEmpty }
 
 /-- TCS の FDIRBundle.
     isFault = .survival (生存モード = 故障時の退避先)
@@ -645,8 +644,8 @@ def tcsFDIR : FDIRBundle tcsSM :=
     detection  := tcs_eventually_survival_as_fault
     recovery   := tcs_fault_leads_to_coldCase }
 
-/-- TCS の SubSystemSpec. -/
-def tcsSpec : SubSystemSpec TCSMode Nat tcsInvariant :=
+/-- TCS の SubSystemSpec（B-7: `SubSystemSpec tcsSM` 形式）。 -/
+def tcsSpec : SubSystemSpec tcsSM :=
   { structural := tcsStructural
     behavioral := tcsBehavioral
     fdir       := tcsFDIR }

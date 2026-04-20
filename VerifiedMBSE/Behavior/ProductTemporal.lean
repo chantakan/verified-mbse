@@ -1,26 +1,36 @@
 import VerifiedMBSE.Behavior.Temporal
 import VerifiedMBSE.Behavior.StateMachineKripke
-import VerifiedMBSE.Behavior.Product
 import VerifiedMBSE.Behavior.ProductKripke
+import VerifiedMBSE.Behavior.Product
 
 /-!
-# LTL over ProductStateMachine (Unified via ToKripke)
+# LTL over ProductKripke (Unified via ToKripke)
 
-B-4 以降、積状態機械上の LTL は `ToKripke` 型クラス経由で統一された
+B-4 以降、積 Kripke 構造上の LTL は `ToKripke` 型クラス経由で統一された
 `Always / Eventually / Leads` で書ける。本ファイルは以下を提供する:
 
-1. **後方互換エイリアス**: `Always_prod` / `Eventually_prod` / `Leads_prod` を
+1. **後方互換エイリアス** (§1): `Always_prod` / `Eventually_prod` / `Leads_prod` を
    `abbrev` で新 API の別名として残す。既存コードは変更なしで動く。
 
-2. **持ち上げ補題**: 各要素状態機械の LTL 保証を積に持ち上げる補題
-   (`.of_and`, `.of_left`, `.of_right`)。return 型は新 API (`Always psm ...`) に
-   統一済み。defeq のおかげで `Always_prod psm ...` と書いた proof と互換。
+2. **持ち上げ補題** (§2-§4): 各要素 Kripke 構造の LTL 保証を積に持ち上げる補題
+   (`.of_and`, `.of_left`, `.of_right`)。
 
-## B-6 で予定の整理
+## B-8c での一般化
 
-持ち上げ補題の名前空間 `Always_prod.*` / `Eventually_prod.*` / `Leads_prod.*` は
-B-6 で `Always.product_*` / `Eventually.product_*` / `Leads.product_*` に rename
-予定。現段階では既存 Examples との互換性を優先して現在の名前を維持する。
+B-7 までは型引数が `{sm₁ : StateMachine S₁ D₁ inv₁}` / `{sm₂ : StateMachine S₂ D₂ inv₂}`
+の StateMachine 特化で、持ち上げに `sm_i.WellFormed` を要求していた。
+
+B-8c では型引数を `{α β : Type} {S₁ D₁ S₂ D₂ : Type} [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]`
+に一般化し、持ち上げ引数は `(ToKripke.toKripke y).NonEmpty` / `(ToKripke.toKripke x).NonEmpty`
+に弱化した。これにより:
+
+- `ProductKripke sm₁ sm₂`（= `ProductStateMachine sm₁ sm₂`）での使用は
+  `hwf₂.nonEmpty` を渡せばそのまま動作
+- `ProductKripke (pk : ProductKripke ...) sm₃`（3 機ネスト合成）でも、
+  `pk.toKripke.NonEmpty` を渡すだけで同じ補題を再利用できる
+
+StateMachine 特化の `Always_prod psm P` / `Eventually_prod psm P` / `Leads_prod psm P Q`
+は後方互換のため abbrev のシグネチャは維持され、呼び出し側は変更不要。
 -/
 
 namespace VerifiedMBSE.Behavior
@@ -29,138 +39,144 @@ namespace VerifiedMBSE.Behavior
 -- §1  Compatibility Aliases
 -- ============================================================
 
-/-- 積状態機械上の Always (後方互換)。`Always psm P` と defeq。 -/
+/-- 積 Kripke 構造上の Always (後方互換エイリアス)。`Always pk P` と defeq。 -/
 abbrev Always_prod
-    {S₁ D₁ : Type} {inv₁ : S₁ → D₁ → Prop}
-    {S₂ D₂ : Type} {inv₂ : S₂ → D₂ → Prop}
-    {sm₁ : StateMachine S₁ D₁ inv₁} {sm₂ : StateMachine S₂ D₂ inv₂}
-    (psm : ProductStateMachine sm₁ sm₂)
+    {α β : Type} {S₁ D₁ S₂ D₂ : Type}
+    [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
+    {x : α} {y : β}
+    (pk : ProductKripke x y)
     (P : S₁ × S₂ → D₁ × D₂ → Prop) : Prop :=
-  Always psm P
+  Always pk P
 
-/-- 積状態機械上の Eventually (後方互換)。`Eventually psm P` と defeq。 -/
+/-- 積 Kripke 構造上の Eventually (後方互換エイリアス)。`Eventually pk P` と defeq。 -/
 abbrev Eventually_prod
-    {S₁ D₁ : Type} {inv₁ : S₁ → D₁ → Prop}
-    {S₂ D₂ : Type} {inv₂ : S₂ → D₂ → Prop}
-    {sm₁ : StateMachine S₁ D₁ inv₁} {sm₂ : StateMachine S₂ D₂ inv₂}
-    (psm : ProductStateMachine sm₁ sm₂)
+    {α β : Type} {S₁ D₁ S₂ D₂ : Type}
+    [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
+    {x : α} {y : β}
+    (pk : ProductKripke x y)
     (P : S₁ × S₂ → D₁ × D₂ → Prop) : Prop :=
-  Eventually psm P
+  Eventually pk P
 
-/-- 積状態機械上の Leads (後方互換)。`Leads psm P Q` と defeq。 -/
+/-- 積 Kripke 構造上の Leads (後方互換エイリアス)。`Leads pk P Q` と defeq。 -/
 abbrev Leads_prod
-    {S₁ D₁ : Type} {inv₁ : S₁ → D₁ → Prop}
-    {S₂ D₂ : Type} {inv₂ : S₂ → D₂ → Prop}
-    {sm₁ : StateMachine S₁ D₁ inv₁} {sm₂ : StateMachine S₂ D₂ inv₂}
-    (psm : ProductStateMachine sm₁ sm₂)
+    {α β : Type} {S₁ D₁ S₂ D₂ : Type}
+    [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
+    {x : α} {y : β}
+    (pk : ProductKripke x y)
     (P Q : S₁ × S₂ → D₁ × D₂ → Prop) : Prop :=
-  Leads psm P Q
+  Leads pk P Q
 
 -- ============================================================
 -- §2  Safety Lifting (Always)
 -- ============================================================
 
-/-- Always の積への持ち上げ: 各成分の Always から積の連言 Always を構築。 -/
+/-- Always の積への持ち上げ: 各成分の Always から積の連言 Always を構築。
+
+    `hr.fst_reachable` / `hr.snd_reachable` は `ProductKripkeReachable` の補題。
+    要素側の `reachable` が induction hypothesis 経由で供給される。 -/
 theorem Always_prod.of_and
-    {S₁ D₁ : Type} {inv₁ : S₁ → D₁ → Prop}
-    {S₂ D₂ : Type} {inv₂ : S₂ → D₂ → Prop}
-    {sm₁ : StateMachine S₁ D₁ inv₁} {sm₂ : StateMachine S₂ D₂ inv₂}
+    {α β : Type} {S₁ D₁ S₂ D₂ : Type}
+    [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
+    {x : α} {y : β}
     {P₁ : S₁ → D₁ → Prop} {P₂ : S₂ → D₂ → Prop}
-    (psm : ProductStateMachine sm₁ sm₂)
-    (h₁ : Always sm₁ P₁) (h₂ : Always sm₂ P₂) :
-    Always psm (fun p d => P₁ p.1 d.1 ∧ P₂ p.2 d.2) :=
+    (pk : ProductKripke x y)
+    (h₁ : Always x P₁) (h₂ : Always y P₂) :
+    Always pk (fun p d => P₁ p.1 d.1 ∧ P₂ p.2 d.2) :=
   fun p d hr =>
     ⟨h₁ p.1 d.1 hr.fst_reachable, h₂ p.2 d.2 hr.snd_reachable⟩
 
-/-- Always の片側持ち上げ (左): sm₁ の Always から積の左成分 Always を得る。 -/
+/-- Always の片側持ち上げ (左): x 側の Always から積の左成分 Always を得る。 -/
 theorem Always_prod.of_left
-    {S₁ D₁ : Type} {inv₁ : S₁ → D₁ → Prop}
-    {S₂ D₂ : Type} {inv₂ : S₂ → D₂ → Prop}
-    {sm₁ : StateMachine S₁ D₁ inv₁} {sm₂ : StateMachine S₂ D₂ inv₂}
+    {α β : Type} {S₁ D₁ S₂ D₂ : Type}
+    [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
+    {x : α} {y : β}
     {P₁ : S₁ → D₁ → Prop}
-    (psm : ProductStateMachine sm₁ sm₂)
-    (h₁ : Always sm₁ P₁) :
-    Always psm (fun p d => P₁ p.1 d.1) :=
+    (pk : ProductKripke x y)
+    (h₁ : Always x P₁) :
+    Always pk (fun p d => P₁ p.1 d.1) :=
   fun p d hr => h₁ p.1 d.1 hr.fst_reachable
 
-/-- Always の片側持ち上げ (右): sm₂ の Always から積の右成分 Always を得る。 -/
+/-- Always の片側持ち上げ (右): y 側の Always から積の右成分 Always を得る。 -/
 theorem Always_prod.of_right
-    {S₁ D₁ : Type} {inv₁ : S₁ → D₁ → Prop}
-    {S₂ D₂ : Type} {inv₂ : S₂ → D₂ → Prop}
-    {sm₁ : StateMachine S₁ D₁ inv₁} {sm₂ : StateMachine S₂ D₂ inv₂}
+    {α β : Type} {S₁ D₁ S₂ D₂ : Type}
+    [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
+    {x : α} {y : β}
     {P₂ : S₂ → D₂ → Prop}
-    (psm : ProductStateMachine sm₁ sm₂)
-    (h₂ : Always sm₂ P₂) :
-    Always psm (fun p d => P₂ p.2 d.2) :=
+    (pk : ProductKripke x y)
+    (h₂ : Always y P₂) :
+    Always pk (fun p d => P₂ p.2 d.2) :=
   fun p d hr => h₂ p.2 d.2 hr.snd_reachable
 
 -- ============================================================
 -- §3  Detection Lifting (Eventually)
 -- ============================================================
 
-/-- Eventually の片側持ち上げ (左): sm₁ の Eventually から積の左成分 Eventually を得る。
-    相手側 (sm₂) の WellFormed で初期データを供給する必要がある。 -/
+/-- Eventually の片側持ち上げ (左): x 側の Eventually から積の左成分 Eventually を得る。
+
+    相手側 (y) の `NonEmpty` で初期データを供給する必要がある。
+    `ProductKripkeReachable.fromLeft` が `init` コンストラクタ一発で
+    積到達可能状態を構成する。 -/
 theorem Eventually_prod.of_left
-    {S₁ D₁ : Type} {inv₁ : S₁ → D₁ → Prop}
-    {S₂ D₂ : Type} {inv₂ : S₂ → D₂ → Prop}
-    {sm₁ : StateMachine S₁ D₁ inv₁} {sm₂ : StateMachine S₂ D₂ inv₂}
+    {α β : Type} {S₁ D₁ S₂ D₂ : Type}
+    [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
+    {x : α} {y : β}
     {P₁ : S₁ → D₁ → Prop}
-    (psm : ProductStateMachine sm₁ sm₂)
-    (hwf₂ : sm₂.WellFormed)
-    (h : Eventually sm₁ P₁) :
-    Eventually psm (fun p d => P₁ p.1 d.1) := by
+    (pk : ProductKripke x y)
+    (hne₂ : (ToKripke.toKripke y).NonEmpty)
+    (h : Eventually x P₁) :
+    Eventually pk (fun p d => P₁ p.1 d.1) := by
   obtain ⟨s₁, d₁, hr₁, hP⟩ := h
-  obtain ⟨s₂, d₂, hp⟩ := ProductReachable.fromLeft hr₁ hwf₂
+  obtain ⟨s₂, d₂, hp⟩ := ProductKripkeReachable.fromLeft hr₁ hne₂
   exact ⟨(s₁, s₂), (d₁, d₂), hp, hP⟩
 
-/-- Eventually の片側持ち上げ (右): sm₂ の Eventually から積の右成分 Eventually を得る。 -/
+/-- Eventually の片側持ち上げ (右): y 側の Eventually から積の右成分 Eventually を得る。 -/
 theorem Eventually_prod.of_right
-    {S₁ D₁ : Type} {inv₁ : S₁ → D₁ → Prop}
-    {S₂ D₂ : Type} {inv₂ : S₂ → D₂ → Prop}
-    {sm₁ : StateMachine S₁ D₁ inv₁} {sm₂ : StateMachine S₂ D₂ inv₂}
+    {α β : Type} {S₁ D₁ S₂ D₂ : Type}
+    [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
+    {x : α} {y : β}
     {P₂ : S₂ → D₂ → Prop}
-    (psm : ProductStateMachine sm₁ sm₂)
-    (hwf₁ : sm₁.WellFormed)
-    (h : Eventually sm₂ P₂) :
-    Eventually psm (fun p d => P₂ p.2 d.2) := by
+    (pk : ProductKripke x y)
+    (hne₁ : (ToKripke.toKripke x).NonEmpty)
+    (h : Eventually y P₂) :
+    Eventually pk (fun p d => P₂ p.2 d.2) := by
   obtain ⟨s₂, d₂, hr₂, hP⟩ := h
-  obtain ⟨s₁, d₁, hp⟩ := ProductReachable.fromRight hr₂ hwf₁
+  obtain ⟨s₁, d₁, hp⟩ := ProductKripkeReachable.fromRight hr₂ hne₁
   exact ⟨(s₁, s₂), (d₁, d₂), hp, hP⟩
 
 -- ============================================================
 -- §4  Recovery Lifting (Leads)
 -- ============================================================
 
-/-- Leads の片側持ち上げ (左): sm₁ の Leads P₁ Q₁ から、積上で
+/-- Leads の片側持ち上げ (左): x 側の Leads P₁ Q₁ から、積上で
     `P₁ ∘ fst ⇒ ◇ (Q₁ ∘ fst)` を得る。 -/
 theorem Leads_prod.of_left
-    {S₁ D₁ : Type} {inv₁ : S₁ → D₁ → Prop}
-    {S₂ D₂ : Type} {inv₂ : S₂ → D₂ → Prop}
-    {sm₁ : StateMachine S₁ D₁ inv₁} {sm₂ : StateMachine S₂ D₂ inv₂}
+    {α β : Type} {S₁ D₁ S₂ D₂ : Type}
+    [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
+    {x : α} {y : β}
     {P₁ Q₁ : S₁ → D₁ → Prop}
-    (psm : ProductStateMachine sm₁ sm₂)
-    (hwf₂ : sm₂.WellFormed)
-    (h : Leads sm₁ P₁ Q₁) :
-    Leads psm (fun p d => P₁ p.1 d.1) (fun p d => Q₁ p.1 d.1) := by
+    (pk : ProductKripke x y)
+    (hne₂ : (ToKripke.toKripke y).NonEmpty)
+    (h : Leads x P₁ Q₁) :
+    Leads pk (fun p d => P₁ p.1 d.1) (fun p d => Q₁ p.1 d.1) := by
   intro p d hr hP
   have hr₁ := hr.fst_reachable
-  have hE : Eventually sm₁ Q₁ := h p.1 d.1 hr₁ hP
-  exact Eventually_prod.of_left psm hwf₂ hE
+  have hE : Eventually x Q₁ := h p.1 d.1 hr₁ hP
+  exact Eventually_prod.of_left pk hne₂ hE
 
-/-- Leads の片側持ち上げ (右): sm₂ の Leads P₂ Q₂ から、積上で
+/-- Leads の片側持ち上げ (右): y 側の Leads P₂ Q₂ から、積上で
     `P₂ ∘ snd ⇒ ◇ (Q₂ ∘ snd)` を得る。 -/
 theorem Leads_prod.of_right
-    {S₁ D₁ : Type} {inv₁ : S₁ → D₁ → Prop}
-    {S₂ D₂ : Type} {inv₂ : S₂ → D₂ → Prop}
-    {sm₁ : StateMachine S₁ D₁ inv₁} {sm₂ : StateMachine S₂ D₂ inv₂}
+    {α β : Type} {S₁ D₁ S₂ D₂ : Type}
+    [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
+    {x : α} {y : β}
     {P₂ Q₂ : S₂ → D₂ → Prop}
-    (psm : ProductStateMachine sm₁ sm₂)
-    (hwf₁ : sm₁.WellFormed)
-    (h : Leads sm₂ P₂ Q₂) :
-    Leads psm (fun p d => P₂ p.2 d.2) (fun p d => Q₂ p.2 d.2) := by
+    (pk : ProductKripke x y)
+    (hne₁ : (ToKripke.toKripke x).NonEmpty)
+    (h : Leads y P₂ Q₂) :
+    Leads pk (fun p d => P₂ p.2 d.2) (fun p d => Q₂ p.2 d.2) := by
   intro p d hr hP
   have hr₂ := hr.snd_reachable
-  have hE : Eventually sm₂ Q₂ := h p.2 d.2 hr₂ hP
-  exact Eventually_prod.of_right psm hwf₁ hE
+  have hE : Eventually y Q₂ := h p.2 d.2 hr₂ hP
+  exact Eventually_prod.of_right pk hne₁ hE
 
 end VerifiedMBSE.Behavior

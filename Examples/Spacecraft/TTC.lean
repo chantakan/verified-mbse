@@ -401,11 +401,10 @@ def ttcStructural : StructuralSpec :=
 theorem ttcStructural_system_eq :
     ttcStructural.system = TTCSystem := rfl
 
-/-- TTC の BehavioralSpec.
+/-- TTC の BehavioralSpec（B-7: Kripke 一般化後）。
     ttcSM: 3 モード, 4 遷移. -/
-def ttcBehavioral : BehavioralSpec TTCMode Nat ttcGlobalInv :=
-  { sm := ttcSM
-    wellFormed := ttcSM_WellFormed }
+def ttcBehavioral : BehavioralSpec ttcSM :=
+  { nonEmpty := ttcSM_WellFormed.nonEmpty }
 
 /-- TTC の FDIRBundle.
     isFault = .fault, isRecovery = .lowRate, isSafe = (≤ 200). -/
@@ -417,8 +416,8 @@ def ttcFDIR : FDIRBundle ttcSM :=
     detection  := ttc_eventually_fault
     recovery   := ttc_fault_leads_to_lowRate }
 
-/-- TTC の SubSystemSpec. -/
-def ttcSpec : SubSystemSpec TTCMode Nat ttcGlobalInv :=
+/-- TTC の SubSystemSpec（B-7: `SubSystemSpec ttcSM` 形式）。 -/
+def ttcSpec : SubSystemSpec ttcSM :=
   { structural := ttcStructural
     behavioral := ttcBehavioral
     fdir       := ttcFDIR }

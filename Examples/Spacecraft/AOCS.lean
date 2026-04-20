@@ -799,11 +799,10 @@ def aocsStructural : StructuralSpec :=
 theorem aocsStructural_system_eq :
     aocsStructural.system = AOCSSystem := rfl
 
-/-- AOCS の BehavioralSpec.
+/-- AOCS の BehavioralSpec（B-7: Kripke 一般化後）。
     aocsSM: 4 モード, 7 遷移. -/
-def aocsBehavioral : BehavioralSpec AOCSMode Nat aocsGlobalInv :=
-  { sm := aocsSM
-    wellFormed := aocsSM_WellFormed }
+def aocsBehavioral : BehavioralSpec aocsSM :=
+  { nonEmpty := aocsSM_WellFormed.nonEmpty }
 
 /-- AOCS の FDIRBundle.
     isFault = .fault, isRecovery = .sunPointing, isSafe = (≤ 36000). -/
@@ -815,8 +814,8 @@ def aocsFDIR : FDIRBundle aocsSM :=
     detection  := aocs_eventually_fault
     recovery   := aocs_fault_leads_to_sunPointing }
 
-/-- AOCS の SubSystemSpec. -/
-def aocsSpec : SubSystemSpec AOCSMode Nat aocsGlobalInv :=
+/-- AOCS の SubSystemSpec（B-7: `SubSystemSpec aocsSM` 形式）。 -/
+def aocsSpec : SubSystemSpec aocsSM :=
   { structural := aocsStructural
     behavioral := aocsBehavioral
     fdir       := aocsFDIR }
