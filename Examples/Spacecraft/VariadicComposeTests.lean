@@ -175,4 +175,29 @@ example : (ToKripke.toKripke epsMiniPayload.x).NonEmpty :=
 example : (ToKripke.toKripke fourChain.x).NonEmpty :=
   fourChain.spec.behavioral.nonEmpty
 
+-- ============================================================
+-- §8  composeWithBridge (B-8e) サニティ
+-- ============================================================
+
+/-- bridge = [] + 自明 hbridge で `composeWithBridge` が動く。 -/
+def epsMiniBridgedEmpty : SubSystemPayload :=
+  epsPayload.composeWithBridge miniPayload [] (by intros; contradiction)
+
+/-- 空 bridge 版の `composeWithBridge` は素朴な `compose` と defeq で等しい. -/
+example : epsMiniBridgedEmpty = epsPayload.compose miniPayload := rfl
+
+/-- 等価補題 `compose_eq_composeWithBridge_nil` 経由での明示確認. -/
+example :
+    epsPayload.compose miniPayload =
+      epsPayload.composeWithBridge miniPayload [] (by intros; contradiction) :=
+  SubSystemPayload.compose_eq_composeWithBridge_nil epsPayload miniPayload
+
+/-- bridge=[] 版でも既存サニティ (name = "EPS+Mini") が通る. -/
+example : epsMiniBridgedEmpty.spec.name = "EPS+Mini" := rfl
+
+/-- bridge=[] 版からも VVRecord が自動生成できる. -/
+def epsMiniBridgedEmpty_r1 : VVRecord := epsMiniBridgedEmpty.spec.safetyRecord
+
+example : epsMiniBridgedEmpty_r1.spec_name = "EPS+Mini-R1-Safety" := rfl
+
 end Examples.Spacecraft.VariadicComposeTests

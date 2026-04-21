@@ -1,59 +1,59 @@
 # Variadic Composition Guide (B-8d)
 
-## 概要
+## Overview
 
-B-8d で導入された **可変長合成 API** は、N 機の `SubSystemSpec` を
-`List` から一気に合成する仕組みである。B-8c までの 2 項
-`SubSystemSpec.compose` ネスト書きを、`List.foldl` ベースで
-簡潔化する。
+The **variadic composition API** introduced in B-8d provides a mechanism for
+composing N `SubSystemSpec` values from a `List` in one shot. It simplifies
+the 2-ary `SubSystemSpec.compose` nesting pattern used through B-8c by
+putting `List.foldl` in front of it.
 
-本ガイドは:
-- なぜ可変長 API が必要か
-- 核となる `SubSystemPayload` 型の設計
-- 2 機合成 `compose` と N 機合成 `composeMany` の使い方
-- スコープ外の事項 (結合律・bridge 付き版)
+This guide covers:
 
-を扱う。
+- Why a variadic API is needed
+- The design of the core `SubSystemPayload` type
+- How to use the 2-ary `compose` and N-ary `composeMany`
+- What is intentionally left out of scope (associativity, bridged variants)
 
 ---
 
-## 1. モチベーション
+## 1. Motivation
 
-B-8c までの N 機合成は、2 項 `SubSystemSpec.compose` を繰り返し呼ぶ
-必要があった:
+Up through B-8c, composing N subsystems required repeatedly calling the
+2-ary `SubSystemSpec.compose`:
 
 ```lean
--- 2 機
+-- 2 subsystems
 let s₁₂ : SubSystemSpec pk₁₂ :=
   SubSystemSpec.compose s₁ s₂ pk₁₂ hne₁ hne₂ [] (by intros; contradiction)
 
--- 3 機
+-- 3 subsystems
 let pk₁₂₃ : ProductKripke pk₁₂ sm₃ := ⟨⟩
 let s₁₂₃ : SubSystemSpec pk₁₂₃ :=
   SubSystemSpec.compose s₁₂ s₃ pk₁₂₃
     s₁₂.behavioral.nonEmpty hne₃ [] (by intros; contradiction)
 
--- 4 機、5 機、...
+-- 4, 5, ...
 ```
 
-機数が増えるごとに以下が定型的に重複する:
+The following boilerplate repeats with each additional subsystem:
 
-1. `ProductKripke` マーカー型の明示構築 (`⟨⟩`)
-2. 各段の `NonEmpty` 引数の受け渡し
-3. 空 `bridge = []` と `hbridge = by intros; contradiction`
-4. 型階層 `ProductKripke (ProductKripke ...) ...` の手書き
+1. Explicit construction of the `ProductKripke` marker (`⟨⟩`)
+2. Passing the `NonEmpty` argument at each stage
+3. The empty `bridge = []` along with the trivial `hbridge` proof
+4. Hand-writing the type hierarchy `ProductKripke (ProductKripke ...) ...`
 
-しかも中間 spec の型 `SubSystemSpec (ProductKripke ...)` が
-次段の第 1 引数として使われるため、通常の `List` では異種型を
-扱えず、`foldl` / `foldr` でまとめて処理できない。
+Worse, the intermediate spec type `SubSystemSpec (ProductKripke ...)` is
+used as the first argument of the next stage. Because a regular `List`
+cannot hold values of different types, `foldl` / `foldr` over a list of
+specs is not directly possible.
 
-B-8d はこれを `SubSystemPayload` 型で解決する。
+B-8d resolves this with the `SubSystemPayload` type.
 
 ---
 
-## 2. `SubSystemPayload` の設計
+## 2. Design of `SubSystemPayload`
 
-### 2.1 型定義
+### 2.1 Definition
 
 ```lean
 structure SubSystemPayload : Type 1 where
@@ -65,74 +65,96 @@ structure SubSystemPayload : Type 1 where
   spec         : @SubSystemSpec α S D toKripkeInst x
 ```
 
-**役割**: 「合成可能な 1 機分の荷物」を匿名的にパッケージ化する。
-`α`・`S`・`D`・`ToKripke` instance・`x`・`spec` を 1 つの構造体に
-詰めることで、異種 `SubSystemSpec x` を `List SubSystemPayload` で
-統一的に扱える。
+**Role**: anonymously packages "one composable payload." Bundling
+`α`, `S`, `D`, the `ToKripke` instance, `x`, and `spec` into a single
+structure lets `List SubSystemPayload` hold heterogeneous
+`SubSystemSpec x` values uniformly.
 
-### 2.2 Universe について
+### 2.2 On Universes
 
-`α : Type` フィールドを持つため `SubSystemPayload : Type 1`。
-`List` は universe polymorphic なので `List SubSystemPayload : Type 1`
-として問題なく扱える。エンドユーザ側で universe を気にする必要はない。
+Because the `α : Type` field makes the type level-polymorphic,
+`SubSystemPayload : Type 1`. Since `List` is universe-polymorphic,
+`List SubSystemPayload : Type 1` works without issue, and end users do
+not need to worry about universes.
 
-### 2.3 スマートコンストラクタ
+### 2.3 Automatic `ToKripke` Supply
 
-既存の `SubSystemSpec x` から payload を構築する:
+`SubSystemPayload.toKripkeInst` is a regular field, not a type-class
+instance, so Lean's instance resolution does not find it when
+elaborating `p.spec.name` or similar projections. To fix this,
+B-8d registers a global instance that supplies
+`ToKripke p.α p.S p.D` from `p.toKripkeInst`:
 
 ```lean
-def SubSystemPayload.ofSpec
+instance instToKripkeOfPayload (p : SubSystemPayload) :
+    ToKripke p.α p.S p.D :=
+  p.toKripkeInst
+```
+
+With this in place, `p.spec.name`, `p.spec.structural`,
+`p.spec.safetyRecord`, etc. all elaborate directly.
+
+### 2.4 Smart Constructor
+
+Wrap an existing `SubSystemSpec x` into a payload:
+
+```lean
+abbrev SubSystemPayload.ofSpec
     {α : Type} {S D : Type} [inst : ToKripke α S D] {x : α}
     (spec : SubSystemSpec x) : SubSystemPayload := ...
 ```
 
-**使用例**:
+`ofSpec` is an `abbrev` so that field projections like
+`(SubSystemPayload.ofSpec spec).α` reduce automatically and `rfl`-based
+sanity tests go through.
+
+**Usage**:
 
 ```lean
--- StateMachine 版の spec を包む
+-- Wrap a StateMachine-based spec
 def epsPayload : SubSystemPayload := SubSystemPayload.ofSpec epsSpec
 
--- 既に合成済みの ProductKripke 版 spec も同じ API で包める
+-- Works equally well for an already-composed ProductKripke spec
 def combined : SubSystemPayload := SubSystemPayload.ofSpec epsMiniSpec
 ```
 
 ---
 
-## 3. 2 機合成: `compose`
+## 3. Two-way Composition: `compose`
 
 ```lean
 def SubSystemPayload.compose (p₁ p₂ : SubSystemPayload) : SubSystemPayload
 ```
 
-**挙動**:
-- 内部で `ProductKripke p₁.x p₂.x := ⟨⟩` マーカーを構築
-- `NonEmpty` 証明は各 `spec.behavioral.nonEmpty` から自動供給
-- `bridge = []` に固定 (機間コネクタは初版でサポート外)
+**Behavior**:
+- Constructs `ProductKripke p₁.x p₂.x := ⟨⟩` internally
+- Supplies `NonEmpty` automatically from each `spec.behavioral.nonEmpty`
+- Fixes `bridge = []` (inter-subsystem connectors are out of scope in v1)
 
-**戻り値 payload**:
+**Resulting payload**:
 - `α = ProductKripke p₁.x p₂.x`
 - `S = p₁.S × p₂.S`
 - `D = p₁.D × p₂.D`
 - `toKripkeInst = instToKripkeProductKripke`
 - `x = ⟨⟩`
-- `spec = SubSystemSpec.compose p₁.spec p₂.spec ...` の結果
+- `spec = SubSystemSpec.compose p₁.spec p₂.spec ...` result
 
-**使用例**:
+**Usage**:
 
 ```lean
 def epsMini : SubSystemPayload :=
   epsPayload.compose miniPayload
 
--- name は "EPS+Mini" (StructuralSpec.compose の命名規約)
+-- Name follows the StructuralSpec.compose naming convention.
 example : epsMini.spec.name = "EPS+Mini" := rfl
 
--- 合成後も VVRecord 自動生成は動作する
+-- Automatic VVRecord generation keeps working after composition.
 def r1 : VVRecord := epsMini.spec.safetyRecord
 ```
 
 ---
 
-## 4. N 機合成: `composeMany`
+## 4. N-way Composition: `composeMany`
 
 ```lean
 def SubSystemPayload.composeMany :
@@ -141,15 +163,15 @@ def SubSystemPayload.composeMany :
   | p :: ps => some (ps.foldl SubSystemPayload.compose p)
 ```
 
-**挙動**:
-- `[]` → `none` (合成対象なし)
-- `[p]` → `some p` (単機はそのまま)
+**Behavior**:
+- `[]` → `none` (nothing to compose)
+- `[p]` → `some p` (single-element lists are returned as-is)
 - `p₀ :: p₁ :: ... :: pₙ` → `some ((((p₀ ∘ p₁) ∘ p₂) ∘ ...) ∘ pₙ)`
 
-**使用例**:
+**Usage**:
 
 ```lean
--- 4 機合成
+-- 4-way composition
 def fourSats : Option SubSystemPayload :=
   SubSystemPayload.composeMany
     [ SubSystemPayload.ofSpec epsSpec
@@ -160,17 +182,19 @@ def fourSats : Option SubSystemPayload :=
 example : fourSats.isSome = true := rfl
 ```
 
-`foldl` を使った左結合を採用している。これにより:
-- 状態型は `(((S₀ × S₁) × S₂) × S₃)` の形で段階的に伸びる
-- 既存の 3 機合成 `(EPS × Mini) × Mini2` と同じ結合方向
-- 射影は `.1.1.1`・`.1.1.2`・`.1.2`・`.2` のパターンで一貫
+The API uses left-associative `foldl`, which:
+- Grows the state type incrementally as `(((S₀ × S₁) × S₂) × S₃)`
+- Matches the associativity direction used by `(EPS × Mini) × Mini2` in
+  the existing 3-way composition examples
+- Keeps projection patterns (`.1.1.1`, `.1.1.2`, `.1.2`, `.2`)
+  consistent across examples
 
 ---
 
-## 5. チェーン書きとリスト書きの等価性
+## 5. Equivalence of Chained and List Notation
 
-直接チェーンした合成と `composeMany` のリスト版は **定義等価** であり、
-`rfl` で示せる:
+Direct chained composition and `composeMany` are **definitionally equal**
+and can be related via `rfl`:
 
 ```lean
 def fourChain : SubSystemPayload :=
@@ -184,24 +208,30 @@ example :
     some fourChain := rfl
 ```
 
-状況に応じて書きやすい方を選べる:
-- **チェーン書き**: 中間結果を `def` で名付けたい場合
-- **リスト書き**: 機数が多く並列的に見せたい場合
+Either notation is fine; choose based on context:
+- **Chained**: when intermediate results should be named via `def`
+- **List**: when many specs should be shown in parallel
 
 ---
 
-## 6. 補助補題
+## 6. Helper Lemmas
 
 ### `compose_parts_length`
 
 ```lean
 theorem SubSystemPayload.compose_parts_length (p₁ p₂ : SubSystemPayload) :
     (p₁.compose p₂).spec.structural.parts.length =
-      p₁.spec.structural.parts.length + p₂.spec.structural.parts.length
+      p₁.spec.structural.system.parts.length +
+        p₂.spec.structural.system.parts.length
 ```
 
-`StructuralSpec.compose_parts_length` を payload レベルに持ち上げたもの。
-`bridge = []` 固定なので parts 数には影響しない。
+A lift of `StructuralSpec.compose_parts_length` to the payload level.
+The right-hand side uses `.system.parts.length` to match the existing
+lemma. Since `StructuralSpec.mk'` sets `system_eq_parts := rfl`, the
+concrete instances in the examples satisfy
+`.structural.parts.length = .structural.system.parts.length` by
+`rfl`, so `.parts.length`-form equalities also go through for specific
+payloads without needing the lemma.
 
 ### `compose_name`
 
@@ -210,7 +240,7 @@ theorem SubSystemPayload.compose_name (p₁ p₂ : SubSystemPayload) :
     (p₁.compose p₂).spec.name = s!"{p₁.spec.name}+{p₂.spec.name}"
 ```
 
-### 境界補題
+### Boundary lemmas
 
 ```lean
 theorem SubSystemPayload.composeMany_singleton (p : SubSystemPayload) :
@@ -222,82 +252,122 @@ theorem SubSystemPayload.composeMany_nil :
 
 ---
 
-## 7. スコープ外の事項
+## 7. Out of Scope
 
-### 7.1 結合律 (associativity)
+### 7.1 Associativity
 
-`(p₁.compose p₂).compose p₃` と `p₁.compose (p₂.compose p₃)` は
-**型等号では示せない**。なぜなら状態型が
+`(p₁.compose p₂).compose p₃` and `p₁.compose (p₂.compose p₃)` **cannot**
+be equal up to Lean's propositional `=`, because their state types are
 
-- 前者: `((S₁ × S₂) × S₃)`
-- 後者: `(S₁ × (S₂ × S₃))`
+- left: `((S₁ × S₂) × S₃)`
+- right: `(S₁ × (S₂ × S₃))`
 
-と一致しないためである。Lean の `=` は型等号に依存するので、
-これらは単純に同じ命題として扱えない。
+which are not judgmentally equal. Lean's `=` requires type equality,
+so these two terms cannot be compared directly.
 
-**意味論的等価性** (state の射影が双射) は `Equivalence.ComponentEquiv`
-経由で示せる可能性があるが、本 API ではスコープ外とする。
-`foldl` と `foldr` の意味論的等価性も同じ理由で扱わない。
+**Semantic equivalence** (an isomorphism on the state projections) is
+provable via `Equivalence.ComponentEquiv`, but that is out of scope for
+this API. The same reasoning applies to any `foldl` vs `foldr` equality.
 
-**実用上の帰結**: `composeMany` は **常に左結合** (`foldl` ベース) で
-動作する。呼び出し側はこの結合順を前提にしてよい。
+**Practical consequence**: `composeMany` always produces a
+**left-associated** composition (`foldl`). Callers can rely on that
+associativity direction.
 
-### 7.2 Bridge 付き可変長
+### 7.2 Bridges in the Variadic API
 
-2 項 `SubSystemSpec.compose` は `bridge : List Connector` を
-第 6 引数で受け取る。N 機合成で「どの段に bridge を挟むか」を
-表現する API は煩雑になるため、初版 (B-8d) では全段 `bridge = []` に
-固定する。
-
-**ワークアラウンド**: 機間コネクタが必要な呼び出しでは、引き続き
-2 項 `SubSystemSpec.compose` を明示的に使う。その後
-`SubSystemPayload.ofSpec` で payload に wrap すれば、後段の
-`composeMany` と組み合わせられる。
-
-**将来拡張余地**: B-8e で以下のような API に拡張できる:
+The 2-ary `SubSystemSpec.compose` takes `bridge : List Connector` as its
+6th argument. B-8d's `compose` and `composeMany` both fix `bridge = []`.
+For 2-ary composition with bridges, B-8e adds the variant
 
 ```lean
-def composeManyWithBridges :
-    List (SubSystemPayload × List Connector) → Option SubSystemPayload
+def SubSystemPayload.composeWithBridge
+    (p₁ p₂ : SubSystemPayload)
+    (bridge : List Connector)
+    (hbridge : ∀ c ∈ bridge,
+        c.source.part ∈ p₁.spec.structural.system.parts
+                        ++ p₂.spec.structural.system.parts ∧
+        c.target.part ∈ p₁.spec.structural.system.parts
+                        ++ p₂.spec.structural.system.parts) :
+    SubSystemPayload
 ```
 
-ただしこの場合、bridge の `hbridge` (connector の parts 参照整合性)
-を後段の合成された parts リストに対して検証する必要があり、
-実装は素直ではない。
+and a definitional-equality lemma
+
+```lean
+theorem SubSystemPayload.compose_eq_composeWithBridge_nil (p₁ p₂) :
+    p₁.compose p₂ =
+      p₁.composeWithBridge p₂ [] (by intros; contradiction) := rfl
+```
+
+so the bridge-less case falls out of the bridged API by definition.
+
+**Typical usage (two-phase approach)**:
+
+```lean
+-- 1. Use composeWithBridge where inter-subsystem connectors are needed.
+let s₀₁ := p₀.composeWithBridge p₁ bridge₀₁ h₀₁
+
+-- 2. Fold the rest of the (bridgeless) payloads with composeMany.
+let combined : Option SubSystemPayload :=
+  SubSystemPayload.composeMany
+    [ SubSystemPayload.ofSpec s₀₁.spec, p₂, p₃, p₄ ]
+```
+
+**No variadic list-form `composeManyWithBridges` is provided**, and this is
+intentional. The natural signature would be
+
+```lean
+-- NOT PROVIDED (permanently out of scope)
+def composeManyWithBridges :
+    List (SubSystemPayload × List Connector × SomeProof) → Option SubSystemPayload
+```
+
+but `SomeProof` (the `hbridge` obligation) depends on the
+**accumulated** `parts` of every preceding stage. Because Lean cannot
+express this accumulated state in a flat list element, the proof must be
+built at call time, stage by stage. In practice this collapses back into
+either (a) chained `composeWithBridge` calls, or (b) a closure/builder
+pattern that trades elegance for marginal convenience. The `composeWithBridge`
++ `composeMany` two-phase pattern covers realistic use cases (most stages
+have no inter-subsystem bridge) without this complexity.
 
 ---
 
-## 8. まとめ
+## 8. Summary
 
-B-8d は **同種性の錯覚を `SubSystemPayload` で作る**ことで、異種
-`SubSystemSpec x` の可変長合成を可能にした。
+B-8d enables variadic composition of heterogeneous `SubSystemSpec x`
+values by **creating the illusion of a single type through
+`SubSystemPayload`**. B-8e completes the 2-ary API by adding bridge
+support at the payload level.
 
-| 観点 | B-8c | B-8d |
-|------|------|------|
-| 2 機合成 | `SubSystemSpec.compose s₁ s₂ pk hne₁ hne₂ [] (by ...)` | `p₁.compose p₂` |
-| N 機合成 | 2 項のネスト書き (手作業) | `composeMany [p₁, p₂, ..., pₙ]` |
-| 異種 spec の統一扱い | 不可 | `List SubSystemPayload` で可能 |
-| `NonEmpty` 引数 | 明示渡し | `spec.behavioral.nonEmpty` で自動 |
-| bridge サポート | `List Connector` | `[]` 固定 (スコープ外) |
+| Aspect | B-8c | B-8d | B-8e |
+|--------|------|------|------|
+| 2-way composition | `SubSystemSpec.compose s₁ s₂ pk hne₁ hne₂ [] (by ...)` | `p₁.compose p₂` | `p₁.composeWithBridge p₂ bridge h` |
+| N-way composition | Nested 2-ary calls (by hand) | `composeMany [p₁, p₂, ..., pₙ]` | (unchanged from B-8d) |
+| Heterogeneous specs in one list | Impossible | `List SubSystemPayload` | (unchanged) |
+| `NonEmpty` argument | Explicit | Automatic (`spec.behavioral.nonEmpty`) | (unchanged) |
+| Bridge support (2-ary) | `List Connector` | Fixed `[]` | `List Connector` |
+| Bridge support (variadic list) | — | Fixed `[]` | Permanently out of scope |
 
-SafeSwarm のような N 機エージェント系の実例では、まず 2 項 `compose`
-(+ bridge) で機間コネクタを含む組を作り、その組を `ofSpec` で
-payload 化して `composeMany` で一気に束ねる、という 2 段構えが
-自然な使い方となる。
+For realistic N-agent systems like SafeSwarm, the recommended pattern
+is a **two-phase approach**: call `composeWithBridge` at the stages that
+need inter-subsystem connectors, wrap the result with `ofSpec`, and fold
+the remaining bridgeless payloads with `composeMany`.
 
 ---
 
-## 関連
+## Related
 
-- B-6: `FDIRBundle.compose` (2 機 FDIR 合成)
-- B-7: `SubSystemSpec` の Kripke 一般化 + 2 機合成
-- B-8a-c: `ProductKripke` の異種型化 + 3 機ネスト合成
-- **B-8d**: 本文書 (可変長合成 API)
-- B-8e (将来): Bridge 付き可変長合成
+- B-6: `FDIRBundle.compose` (2-way FDIR composition)
+- B-7: Kripke generalization of `SubSystemSpec` + 2-way composition
+- B-8a–c: Heterogeneous `ProductKripke` + 3-way nested composition
+- **B-8d**: this document — variadic composition API (`composeMany`)
+- **B-8e**: this document — bridged 2-ary payload composition (`composeWithBridge`)
+- (no B-8f planned) — `composeManyWithBridges` intentionally out of scope
 
-各マイルストーンの実装ファイル:
-- `VerifiedMBSE/Behavior/ProductKripke.lean` — B-8a-c
-- `VerifiedMBSE/VV/ProductFDIR.lean` — B-6/B-7/B-8c 合流
-- `VerifiedMBSE/VV/VariadicCompose.lean` — **B-8d (本文書の主題)**
-- `Examples/Spacecraft/Integration.lean` — B-8c 3 機ネストサニティ
-- `Examples/Spacecraft/VariadicComposeTests.lean` — B-8d サニティ
+Implementation files for each milestone:
+- `VerifiedMBSE/Behavior/ProductKripke.lean` — B-8a–c
+- `VerifiedMBSE/VV/ProductFDIR.lean` — B-6/B-7/B-8c merge point
+- `VerifiedMBSE/VV/VariadicCompose.lean` — **B-8d + B-8e (subject of this document)**
+- `Examples/Spacecraft/Integration.lean` — B-8c 3-way nested sanity test
+- `Examples/Spacecraft/VariadicComposeTests.lean` — B-8d + B-8e sanity tests

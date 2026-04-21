@@ -35,6 +35,20 @@ B-8d では以下を導入してこれを解決する:
   左結合的に合成。空リストは `none`、単機は `some p`、2 機以上は
   `some ((((p₀ ∘ p₁) ∘ p₂) ∘ ...) ∘ pₙ)`。
 
+B-8e で以下を追加した:
+
+- `SubSystemPayload.composeWithBridge`: 2 機合成の bridge 付きバージョン。
+  機間コネクタ (通信リンク、電力共有ラインなど) を `bridge : List Connector`
+  として受け取り、`hbridge` で parts 参照整合性を保証する。
+- 等価補題 `compose_eq_composeWithBridge_nil`: bridge 無し版 `compose` は
+  `composeWithBridge [] _` と defeq。
+
+**可変長 + bridge の List 版は意図的に提供していない**: 段ごとの bridge の
+`hbridge` 命題は前段までの累積 parts に依存するため、
+`List (SubSystemPayload × List Connector × Proof)` のような事前構築済み
+データ構造では表現不能。実用上は `composeWithBridge` を必要な段で呼び、
+残りを `composeMany` で束ねる二段アプローチを推奨する。
+
 ## 設計判断
 
 ### 左結合 (`foldl`) を採用
@@ -167,8 +181,8 @@ abbrev SubSystemPayload.ofSpec
 
     - `ProductKripke p₁.x p₂.x` マーカーを内部で構築
     - `NonEmpty` 証明は各 `spec.behavioral.nonEmpty` から自動供給
-    - bridge は `[]` に固定 (機間コネクタが必要な場合は
-      2 項 `SubSystemSpec.compose` を使う)
+    - bridge は `[]` に固定 (機間コネクタが必要な場合は B-8e で追加された
+      `composeWithBridge` を使う)
 
     戻り値の payload は:
     - `α = ProductKripke p₁.x p₂.x`
@@ -194,6 +208,81 @@ def SubSystemPayload.compose (p₁ p₂ : SubSystemPayload) : SubSystemPayload :
         p₁.spec.behavioral.nonEmpty
         p₂.spec.behavioral.nonEmpty
         [] (by intros; contradiction) }
+
+-- ============================================================
+-- §2.5  Bridged 2-ary composition (B-8e)
+-- ============================================================
+
+/-- 2 つのペイロードを bridge connector 付きで並列合成する。
+
+    B-8d の `compose` が `bridge = []` に固定していたのを拡張し、機間コネクタ
+    (例: 機間通信リンク、電力共有ライン) を `bridge : List Connector` で
+    受け取れるようにしたもの。
+
+    ### `hbridge` 制約
+
+    bridge の各 connector は `p₁` と `p₂` の `.system.parts` のどちらかに
+    source/target が属する必要がある。これは 2 項 `SubSystemSpec.compose` の
+    `hbridge` をそのまま payload レベルに持ち上げたもの。
+
+    ```
+    ∀ c ∈ bridge,
+      c.source.part ∈ p₁.spec.structural.system.parts
+                      ++ p₂.spec.structural.system.parts ∧
+      c.target.part ∈ p₁.spec.structural.system.parts
+                      ++ p₂.spec.structural.system.parts
+    ```
+
+    呼び出し側は各 bridge に対してこの属性を proof として渡す。
+
+    ### 実装
+
+    `compose` と同じく `letI` で local instance を導入し、`ProductKripke` を
+    構築して `SubSystemSpec.compose` を `bridge`/`hbridge` 付きで呼ぶ。
+    `bridge = []` かつ `hbridge = by intros; contradiction` を渡すと、
+    `compose p₁ p₂` と同じ結果になる（下記 `compose_eq_composeWithBridge_nil`
+    参照）。
+
+    ### 可変長との関係
+
+    可変長 API (`composeMany`) の bridge 付き版は **意図的に提供しない**。
+    段ごとの bridge の `hbridge` 命題は前段までの累積 parts に依存するため、
+    `List (SubSystemPayload × List Connector × Proof)` のような事前構築済み
+    データ構造で表現できない。実用上は本 `composeWithBridge` を必要な段で
+    呼び、残りを `composeMany` で束ねる二段アプローチを推奨する。 -/
+def SubSystemPayload.composeWithBridge
+    (p₁ p₂ : SubSystemPayload)
+    (bridge : List Connector)
+    (hbridge : ∀ c ∈ bridge,
+        c.source.part ∈ p₁.spec.structural.system.parts
+                        ++ p₂.spec.structural.system.parts ∧
+        c.target.part ∈ p₁.spec.structural.system.parts
+                        ++ p₂.spec.structural.system.parts) :
+    SubSystemPayload :=
+  letI := p₁.toKripkeInst
+  letI := p₂.toKripkeInst
+  let pk : ProductKripke p₁.x p₂.x := ⟨⟩
+  { α := ProductKripke p₁.x p₂.x
+    S := p₁.S × p₂.S
+    D := p₁.D × p₂.D
+    toKripkeInst := instToKripkeProductKripke
+    x := pk
+    spec :=
+      SubSystemSpec.compose p₁.spec p₂.spec pk
+        p₁.spec.behavioral.nonEmpty
+        p₂.spec.behavioral.nonEmpty
+        bridge hbridge }
+
+/-- `compose p₁ p₂` は `composeWithBridge p₁ p₂ [] _` と defeq で等しい。
+
+    bridge 引数を `[]` に固定した `composeWithBridge` は、B-8d の素朴な
+    `compose` と完全に一致する。これにより「bridge なし」経路と
+    「bridge あり（空 bridge）」経路の等価性が型レベルで保証され、
+    既存 API との後方互換性が明示される。 -/
+theorem SubSystemPayload.compose_eq_composeWithBridge_nil
+    (p₁ p₂ : SubSystemPayload) :
+    p₁.compose p₂ =
+      p₁.composeWithBridge p₂ [] (by intros; contradiction) := rfl
 
 -- ============================================================
 -- §3  可変長合成

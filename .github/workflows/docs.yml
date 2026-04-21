@@ -27,22 +27,27 @@ jobs:
           curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
           echo "$HOME/.elan/bin" >> $GITHUB_PATH
 
-      - name: Get Mathlib cache
+      - name: Install Lean toolchain
         run: |
-          # Mathlib のビルドキャッシュを取得（ビルド時間を大幅に短縮）
-          cd docbuild
-          lake exe cache get || true
-        env:
-          MATHLIB_NO_CACHE_ON_UPDATE: 1
+          # lean-toolchain から明示的に install し、
+          # 後段で暗黙に別バージョンに切り替わる事故を防ぐ
+          elan toolchain install $(cat lean-toolchain)
+          elan override set $(cat lean-toolchain)
 
-      - name: Update doc-gen4
+      - name: Get Mathlib cache (root)
         run: |
-          cd docbuild
-          MATHLIB_NO_CACHE_ON_UPDATE=1 lake update doc-gen4
+          # ルート側のビルドに必要な Mathlib キャッシュを取得
+          lake exe cache get || true
 
       - name: Build library
         run: |
           lake build VerifiedMBSE
+
+      - name: Get Mathlib cache (docbuild)
+        run: |
+          # docbuild は同じ Mathlib rev を参照するため、キャッシュを再利用
+          cd docbuild
+          lake exe cache get || true
 
       - name: Build docs
         run: |

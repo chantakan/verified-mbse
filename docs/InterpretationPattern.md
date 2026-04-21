@@ -1,55 +1,62 @@
-# Interpretation パターン
+# Interpretation Pattern
 
-`VerifiedMBSE.Core.Interpretation := KerMLType → Type` はドメインモデルの型識別子
-（`KerMLType`）に Lean の担体型を割り当てる**意味論関数**である。この関数をどう書くかが、
-モデルの健全性と保守性を左右する。本ドキュメントはその推奨パターンと、避けるべき
-アンチパターンをまとめる。
+`VerifiedMBSE.Core.Interpretation := KerMLType → Type` is the **semantic
+function** that assigns Lean carrier types to the type identifiers
+(`KerMLType`) of a domain model. How this function is written governs
+both the soundness and the maintainability of the model. This document
+captures the recommended pattern and the anti-patterns to avoid.
 
 ## TL;DR
 
-- **アンチパターン**: `match t.name with | some "Foo" => FooType | _ => Unit` — 文字列
-  マッチで `_ => Unit` に流すと、typo 時に silently unsoundness が潜む。
-- **推奨パターン**: ドメイン固有の `inductive` enum（TypeTag）を定義し、
-  enum → `KerMLType` への埋め込み関数と、enum → `Type` の網羅的 pattern match で
-  `Interpretation` を構築する。文字列比較は enum 逆引きの 1 箇所に閉じ込める。
+- **Anti-pattern**: `match t.name with | some "Foo" => FooType | _ => Unit`.
+  Falling through to `_ => Unit` on a string match hides
+  unsoundness silently whenever there is a typo.
+- **Recommended pattern**: define a domain-specific `inductive`
+  enum (TypeTag), provide an embedding from enum to `KerMLType`, and
+  build `Interpretation` from an exhaustive pattern match on the enum.
+  Confine string comparisons to a single reverse-lookup function.
 
 ---
 
-## 問題点: naive な文字列マッチ
+## The Problem: Naïve String Matching
 
 ```lean
--- アンチパターン
+-- Anti-pattern
 def EPSNatInterpretation : Interpretation := fun t =>
   match t.name with
   | some "PowerSupply" => Nat
   | some "Load"        => Nat
   | some "PowerPort"   => Nat
   | some "~PowerPort"  => Nat
-  | _                  => Unit  -- ← 落とし穴
+  | _                  => Unit  -- ← pitfall
 ```
 
-### リスク
+### Risks
 
-1. **Typo による silent unsoundness**: `some "Powr Supply"`（space 抜け）と書いても
-   コンパイラは検知せず、該当 KerMLType の担体は `Unit` になる。`Unit` は全ての
-   述語を満たすため、`SMInvariantCompatible` の不変条件が常に成立してしまう。
-2. **モデル拡張時の抜け**: 新しい PartDef を追加したが `Interpretation` に対応する
-   case を追加し忘れると、`_ => Unit` に流れる。型エラーが出ない。
-3. **Interpretation の健全性証明が困難**: `InterpretationRespects I` を証明するには、
-   どの `KerMLType` に対して `Unit` が返るかを調査する必要があり、文字列ベースでは
-   網羅性が機械的に確認できない。
+1. **Silent unsoundness due to typos**: even writing
+   `some "Powr Supply"` (a missing space) compiles without complaint,
+   and the corresponding `KerMLType` receives `Unit` as its carrier.
+   Because `Unit` satisfies every predicate, `SMInvariantCompatible`'s
+   invariants become trivially true.
+2. **Gaps when extending the model**: if you add a new `PartDef` but
+   forget to add the corresponding case to `Interpretation`, the new
+   type silently falls through to `_ => Unit`. No type error.
+3. **Soundness proofs are hard**: to prove `InterpretationRespects I`,
+   you must investigate which `KerMLType` values get mapped to `Unit`,
+   and string matching does not let you confirm exhaustiveness
+   mechanically.
 
 ---
 
-## 推奨パターン: Tag enum + 網羅的 dispatch
+## Recommended Pattern: Tag Enum + Exhaustive Dispatch
 
-### ステップ 1: ドメイン固有の TypeTag enum を定義
+### Step 1: Define a Domain-Specific TypeTag Enum
 
-そのサブシステム（または合成単位）で現れる `KerMLType` を全て列挙した
-`inductive` を用意する。
+Prepare an `inductive` enum that lists every `KerMLType` appearing in
+that subsystem (or composition unit).
 
 ```lean
-/-- EPS サブシステムに出現する全 KerMLType の識別子. -/
+/-- Identifiers for every KerMLType appearing in the EPS subsystem. -/
 inductive EPSTypeTag where
   | powerSupply
   | load
@@ -58,17 +65,18 @@ inductive EPSTypeTag where
   deriving Repr, BEq, DecidableEq
 ```
 
-**ポイント**:
-- `deriving DecidableEq` により、後段の逆引きと証明で `decide` が使える。
-- 列挙対象は「このサブシステムで意味論を与えたい型全て」。ポート型、part 型、
-  必要なら signal / message 型も含める。
+**Key points**:
+- `deriving DecidableEq` lets `decide` handle the reverse lookup and
+  later proofs.
+- Include every type for which the subsystem needs semantics: port
+  types, part types, and signal/message types if relevant.
 
-### ステップ 2: enum と KerMLType の埋め込みを定義
+### Step 2: Define the Enum–KerMLType Embedding
 
-enum の各 tag が一意の文字列に対応することを宣言する。
+Declare that each tag corresponds to a unique string.
 
 ```lean
-/-- Tag から KerMLType へ: 文字列は**ここ一箇所だけ**で登場する. -/
+/-- From tag to KerMLType: strings appear **only here**. -/
 def EPSTypeTag.toName : EPSTypeTag → String
   | .powerSupply   => "PowerSupply"
   | .load          => "Load"
@@ -79,14 +87,15 @@ def EPSTypeTag.toKerMLType (tag : EPSTypeTag) : KerMLType :=
   { name := some tag.toName }
 ```
 
-### ステップ 3: 逆引き関数（文字列 → enum）を定義
+### Step 3: Define the Reverse Lookup (String → Enum)
 
-この関数が「文字列マッチの集約点」。ここだけで `_ => none` のフォールバックを
-持ち、呼び出し側は `Option EPSTypeTag` を通して扱う。
+This function is where all string matching is concentrated. Only this
+function needs a `_ => none` fallback; callers work through
+`Option EPSTypeTag`.
 
 ```lean
-/-- KerMLType.name から EPSTypeTag への逆引き.
-    ドメイン外の型は `none` を返す. -/
+/-- Reverse lookup from KerMLType.name to EPSTypeTag.
+    Out-of-domain types return `none`. -/
 def EPSTypeTag.fromName : Option String → Option EPSTypeTag
   | some "PowerSupply"  => some .powerSupply
   | some "Load"         => some .load
@@ -95,14 +104,14 @@ def EPSTypeTag.fromName : Option String → Option EPSTypeTag
   | _                   => none
 ```
 
-### ステップ 4: 担体型割当を network 化
+### Step 4: Connect Carrier Types via the Enum
 
-各 tag に Lean の担体型を割り当てる関数を、**網羅的 pattern match** で書く。
-`_` case を使わず全 tag を明示することで、enum 拡張時に case 漏れが
-コンパイラエラーとして検出される。
+Assign a Lean carrier type to each tag using an **exhaustive pattern
+match**. Avoiding the `_` case forces the compiler to flag missing
+cases when the enum is extended.
 
 ```lean
-/-- 各 tag の担体型. 全ケース網羅(_ case なし). -/
+/-- Carrier type per tag. Exhaustive, no `_` case. -/
 def EPSTypeTag.interp : EPSTypeTag → Type
   | .powerSupply   => Nat
   | .load          => Nat
@@ -110,14 +119,16 @@ def EPSTypeTag.interp : EPSTypeTag → Type
   | .powerPortConj => Nat
 ```
 
-### ステップ 5: Interpretation を合成
+### Step 5: Assemble the Interpretation
 
-`Interpretation` は `KerMLType → Type`。tag への逆引きが成功すれば `.interp`、
-失敗（ドメイン外）なら `Unit`（または `Empty`、後述）を返す。
+`Interpretation` is `KerMLType → Type`. If the reverse lookup succeeds,
+return `.interp`; if it fails (the type is out of domain), return
+`Unit` (or `Empty`; see below).
 
 ```lean
-/-- EPS の Interpretation. 文字列マッチは `fromName` の 1 箇所に閉じ込められており、
-    担体型割当は `interp` の網羅的 pattern match で保証される. -/
+/-- EPS Interpretation. String matching is confined to `fromName`,
+    and carrier-type assignment is guaranteed exhaustive via
+    `interp`'s pattern match. -/
 def EPSNatInterpretation : Interpretation := fun t =>
   match EPSTypeTag.fromName t.name with
   | some tag => tag.interp
@@ -126,40 +137,42 @@ def EPSNatInterpretation : Interpretation := fun t =>
 
 ---
 
-## フォールバック型の選択
+## Choosing the Fallback Type
 
-ドメイン外の型（`fromName` が `none` を返した場合）に何を割り当てるかは、
-**意図的に選ぶ設計判断**である。
+What to assign to out-of-domain types (when `fromName` returns `none`)
+is a **deliberate design choice**.
 
-| フォールバック | 意味論 | 用途 |
+| Fallback | Meaning | When to use |
 |------------|--------|------|
-| `Unit` | 「全てのインスタンスは `()`」 | ドメイン外も参照可能なモデル（従来互換） |
-| `Empty` | 「インスタンス不在」 | ドメイン外は使用禁止を型で強制 |
-| `PUnit.{u}` | Unit の universe-polymorphic 版 | universe 汎用性が必要な場合 |
+| `Unit` | "Every instance is `()`" | When out-of-domain references should still work (backward compatibility) |
+| `Empty` | "No instances exist" | When out-of-domain use should be banned at the type level |
+| `PUnit.{u}` | Universe-polymorphic version of Unit | When universe polymorphism is needed |
 
-**推奨**: Tag enum で「自分のドメインで扱う型」を列挙してあるなら、ドメイン外を
-`Empty` にすれば**型レベルで使用を禁止**できる。既存互換のため `Unit` を
-使い続ける場合も、その**理由**をコメントで明示する。
+**Recommendation**: if the tag enum lists every type your domain
+handles, using `Empty` for out-of-domain **bans usage at the type
+level**. If you must keep `Unit` for compatibility, document the
+**reason** in a comment.
 
 ```lean
 def EPSNatInterpretation : Interpretation := fun t =>
   match EPSTypeTag.fromName t.name with
   | some tag => tag.interp
   | none     =>
-    -- Empty にするとドメイン外の型参照で使えなくなる。既存の Architecture で
-    -- 他サブシステムと緩く接続する可能性を残すため Unit を採用。
+    -- Using Empty would forbid out-of-domain references. We keep
+    -- Unit so this interpretation can be loosely connected with
+    -- other subsystems in the existing architecture.
     Unit
 ```
 
 ---
 
-## 合成モデル: 複数サブシステムの Interpretation
+## Composition: Interpretations Across Subsystems
 
-複数サブシステム（EPS + AOCS + TCS 等）を合成する場合、各サブシステムの
-Tag enum を sum 型で束ねるか、各 Interpretation を `KerMLType.name` で
-dispatch する形で合成する。
+When composing multiple subsystems (EPS + AOCS + TCS etc.), either
+combine the subsystem tag enums into a sum type, or compose each
+subsystem's Interpretation by dispatching on `KerMLType.name`.
 
-### パターン A: Sum 型で enum を結合
+### Pattern A: Combine Enums via a Sum Type
 
 ```lean
 inductive SpacecraftTypeTag where
@@ -179,12 +192,14 @@ def SpacecraftTypeTag.interp : SpacecraftTypeTag → Type
   | .tcs  tag => tag.interp
 ```
 
-**利点**: 全サブシステムの型空間が 1 つの enum に集約される。命名衝突（例えば
-EPS と AOCS 両方に `"Mode"` という型がある）を型レベルで検出できる。
+**Pros**: the type space of every subsystem lands in one enum. Naming
+collisions (e.g., both EPS and AOCS defining a `"Mode"` type) are
+detected at the type level.
 
-**欠点**: サブシステム追加のたびに合成 enum を更新する必要がある。
+**Cons**: the composite enum must be updated whenever a subsystem is
+added.
 
-### パターン B: Interpretation の `dispatch`
+### Pattern B: Dispatch Between Interpretations
 
 ```lean
 def SpacecraftInterpretation : Interpretation := fun t =>
@@ -196,20 +211,22 @@ def SpacecraftInterpretation : Interpretation := fun t =>
     Unit
 ```
 
-**利点**: サブシステム独立性が高い。
+**Pros**: subsystems stay strongly independent.
 
-**欠点**: 命名衝突が silently 解決される（先に検出された方が勝つ）。
-衝突検出には別途 `no_overlap` 補題を証明する必要がある。
+**Cons**: naming collisions are silently resolved (whichever is
+detected first wins). To detect collisions you must prove a separate
+`no_overlap` lemma.
 
 ---
 
-## 健全性の保証
+## Guaranteeing Soundness
 
-`InterpretationRespects I`（`soundness` 定理の仮定）を証明する際、Tag パターンを
-採用していると induction が tag enum 上で完結する。
+When proving `InterpretationRespects I` (a hypothesis for the
+`soundness` theorem), the tag pattern lets induction proceed on the
+finite tag enum.
 
 ```lean
--- 例: EPS 内部の Specialization は全て trivial に reflexive
+-- Example: all specialization inside EPS is trivially reflexive
 theorem EPSInterpretationRespects_trivial :
     ∀ tag : EPSTypeTag,
       semanticSpecializes EPSNatInterpretation tag.toKerMLType tag.toKerMLType := by
@@ -217,27 +234,27 @@ theorem EPSInterpretationRespects_trivial :
   exact semanticSpecializes_refl _ _
 ```
 
-網羅的 pattern match で書かれていれば、`cases tag` で有限個の case を機械的に
-潰せる。文字列マッチ版では `t.name` の `Option String` 全体を網羅する必要が
-あり、induction 不可能だった。
+If the pattern match is exhaustive, `cases tag` mechanically discharges
+the finite number of cases. With string matching, induction over the
+full `Option String` space in `t.name` is not tractable.
 
 ---
 
-## アンチパターンと対策のまとめ
+## Anti-patterns and Countermeasures
 
-| アンチパターン | 問題 | 推奨 |
+| Anti-pattern | Problem | Recommendation |
 |-------------|------|------|
-| `match t.name with ... \| _ => Unit` を `Interpretation` 本体に書く | typo で silent unsoundness | 逆引きを補助関数に分離 + 網羅的 tag pattern |
-| `some "Foo"` リテラルを `Interpretation` 内で直接使う | モデル変更で文字列を全ファイル grep する羽目に | `EPSTypeTag.toName` の 1 箇所に集約 |
-| ドメイン外を `Unit` にして未使用と偽装 | 他モジュールが誤用してもエラー出ない | `Empty` を検討、または理由を docstring で明示 |
-| 複数サブシステムで同名型を別意味で使う | dispatch 順で意味が変わる | Sum 型 enum で命名衝突を型検出 |
-| `Interpretation` の健全性を紙で議論 | 拡張時にすぐ壊れる | `cases tag` で機械証明 |
+| `match t.name with ... \| _ => Unit` inside `Interpretation` | Typo causes silent unsoundness | Extract reverse lookup into a helper + exhaustive tag pattern |
+| Using `some "Foo"` literals directly inside `Interpretation` | A model change forces grep across the whole codebase | Concentrate strings in `EPSTypeTag.toName` |
+| Hiding out-of-domain types under `Unit` | Misuse by other modules is never caught | Consider `Empty`, or document the reason in a docstring |
+| Reusing the same type name across subsystems with different meaning | Dispatch order silently changes meaning | Use a sum-type enum so naming collisions trigger a type error |
+| Arguing interpretation soundness on paper | Immediately breaks on extension | Use `cases tag` for a mechanical proof |
 
 ---
 
-## 参考実装
+## Reference Implementation
 
-- `Examples/Spacecraft/EPS.lean`: F8 後の `EPSTypeTag` + `EPSNatInterpretation` を
-  上記パターンで実装。テストで `EPSTypeTag` の全 tag に対する `interp` が
-  rfl で検査される。
-- `Examples/Spacecraft/F8Tests.lean`: 受入条件テスト。
+- `Examples/Spacecraft/EPS.lean`: post-F8, `EPSTypeTag` +
+  `EPSNatInterpretation` are implemented via the pattern above. Tests
+  check `interp` for every `EPSTypeTag` value via `rfl`.
+- `Examples/Spacecraft/F8Tests.lean`: acceptance tests.

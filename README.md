@@ -82,9 +82,18 @@ def epsAocsTcsPK : ProductKripke epsAocsPK tcsSM := ⟨⟩
 def epsAocsTcsSpec : SubSystemSpec epsAocsTcsPK :=
   SubSystemSpec.compose epsAocsSpec tcsSpec epsAocsTcsPK
     epsAocsSpec.behavioral.nonEmpty tcsSM_WellFormed.nonEmpty [] (by intros; contradiction)
+
+-- N subsystems via variadic API (B-8d) — List.foldl-based composition
+def sats : Option SubSystemPayload :=
+  SubSystemPayload.composeMany
+    [ SubSystemPayload.ofSpec epsSpec
+    , SubSystemPayload.ofSpec aocsSpec
+    , SubSystemPayload.ofSpec tcsSpec
+    , SubSystemPayload.ofSpec ttcSpec ]
 ```
 
 The composed spec auto-derives FDIR safety / detection / recovery for the product.
+See [Variadic Composition Guide](docs/VariadicComposition.md) for details on the B-8d API.
 
 ### 5. Build the V-Matrix and prove completeness
 
@@ -156,7 +165,8 @@ VerifiedMBSE/
 │   ├── Power.lean           #   ModePowerSpec, PowerBudgetOK₂
 │   ├── Propagation.lean     #   LayerPropagation, depth-based supports
 │   ├── Contract.lean        #   Contract, ContractedSystem, CouplingConstraint
-│   └── ProductFDIR.lean     #   FDIRBundle.compose, SubSystemSpec.compose (N-way)
+│   ├── ProductFDIR.lean     #   FDIRBundle.compose, SubSystemSpec.compose (N-way)
+│   └── VariadicCompose.lean #   SubSystemPayload, composeMany (B-8d variadic)
 │
 ├── Matrix/                  # V-matrix construction
 │   ├── VColumn.lean         #   VColumn, atLayer, Complete, fullyTrusted (struct-discrim)
@@ -186,7 +196,8 @@ Examples/Spacecraft/         # Full satellite case study + acceptance tests
 ├── Integration.lean         #   2-way and 3-way nested composition sanity tests
 ├── F1F2Tests.lean           #   Evidence parameterization + mixed-evidence tests
 ├── F3F5F6Tests.lean         #   Specialization preorder, Layer 8-level, ModelBoundary type-binding
-└── F8Tests.lean             #   Interpretation pattern (EPSTypeTag + exhaustive dispatch)
+├── F8Tests.lean             #   Interpretation pattern (EPSTypeTag + exhaustive dispatch)
+└── VariadicComposeTests.lean #  B-8d payload / compose / composeMany sanity tests
 ```
 
 ## Key Types at a Glance
@@ -202,6 +213,9 @@ Examples/Spacecraft/         # Full satellite case study + acceptance tests
 | `ProductKripke x y` | Heterogeneous product of Kripke structures | Enables N-way nested composition (3+ subsystems) |
 | `SubSystemSpec` | Structure + behavior + FDIR | One value = complete subsystem verification |
 | `SubSystemSpec.compose` | Parallel composition of two specs | Composes FDIR, spawns auto-derived bridge Records |
+| `SubSystemPayload` | Anonymous wrapper bundling `α / S / D / ToKripke / x / spec` | Enables `List`-based variadic composition across heterogeneous specs (B-8d) |
+| `SubSystemPayload.composeMany` | `List.foldl`-based N-way composition | One-shot composition of N subsystems (B-8d) |
+| `SubSystemPayload.composeWithBridge` | 2-ary payload composition with bridge connectors | Inter-subsystem connectors at the payload level (B-8e) |
 | `VVRecord` | Machine proof + validation trace | The atomic unit of V&V evidence |
 | `ValidationEvidence` | `.trusted` / `.contract` / `.confidence` | 3-level confidence hierarchy; `isTrusted` by constructor (no Float equality) |
 | `VMatrix.Complete` | No gaps in the V-matrix | **The main theorem** — if it compiles, you're done |
@@ -217,7 +231,7 @@ Examples/Spacecraft/         # Full satellite case study + acceptance tests
 1. **Declarative.** Define a `SubSystemSpec`; proofs and VVRecords are derived.
 2. **Verifiable.** `lake build` = all proofs checked. Zero `sorry` = zero gaps.
 3. **Readable.** V-Matrix output in Markdown, terminal, and SysML v2 text.
-4. **Composable.** N-way nested subsystem composition via `ProductKripke`.
+4. **Composable.** N-way nested subsystem composition via `ProductKripke`, plus variadic `composeMany` over `List SubSystemPayload`.
 5. **Extensible.** Domain-independent core; spacecraft examples are separate.
 6. **Typed discipline.** `ModelBoundary (vm : VMatrix)`, `EPSTypeTag` enum for interpretations — structural checks over string matching.
 
@@ -227,6 +241,7 @@ Examples/Spacecraft/         # Full satellite case study + acceptance tests
 - **[Architecture Guide](docs/Architecture.md)** — Type-theoretic foundations, design decisions, proof patterns
 - **[Tutorial: Adding a New Subsystem](docs/Tutorial.md)** — Step-by-step walkthrough
 - **[Interpretation Pattern](docs/InterpretationPattern.md)** — Best practices for `KerMLType → Type` interpretations (F8)
+- **[Variadic Composition Guide](docs/VariadicComposition.md)** — `SubSystemPayload` and `composeMany` for N-way composition (B-8d)
 
 ## Requirements
 
@@ -237,11 +252,11 @@ Examples/Spacecraft/         # Full satellite case study + acceptance tests
 
 | | Files | Lines | sorry | warnings |
 |---|---|---|---|---|
-| Library (VerifiedMBSE/) | 36 | ~3,970 | 0 | 0 |
-| Examples (satellite + tests) | 10 | ~3,200 | 0 | 0 |
-| Acceptance tests | ~70 examples | — | — | — |
+| Library (VerifiedMBSE/) | 37 | ~4,450 | 0 | 0 |
+| Examples (satellite + tests) | 11 | ~3,630 | 0 | 0 |
+| Acceptance tests | ~100 examples | — | — | — |
 
-Build: `lake build VerifiedMBSE` (176 jobs) + `lake build Examples` (185 jobs), all passing with zero sorry/warnings.
+Build: `lake build VerifiedMBSE` (177 jobs) + `lake build Examples` (187 jobs), all passing with zero sorry/warnings.
 
 ## License
 
