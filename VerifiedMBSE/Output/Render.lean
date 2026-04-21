@@ -39,12 +39,31 @@ def multiplicityStr (lower upper : Nat) : String :=
   else if upper == 0 then s!"[{lower}..*]"
   else s!"[{lower}..{upper}]"
 
-/-- Convert a Layer to a string. -/
-def layerToString (l : VerifiedMBSE.VV.Layer) : String :=
-  match l with | .system => "system" | .subsystem => "subsystem" | .component => "component"
+/-- Convert a Layer to a full string representation.
 
-/-- Convert a Layer to an abbreviation. -/
+    F5 で Layer が 8 階層に拡張されたため、全 constructor に対して
+    ECSS-E-ST-10C 準拠の文字列を割り当てる。 -/
+def layerToString (l : VerifiedMBSE.VV.Layer) : String :=
+  match l with
+  | .mission   => "mission"
+  | .system    => "system"
+  | .segment   => "segment"
+  | .subsystem => "subsystem"
+  | .assembly  => "assembly"
+  | .unit      => "unit"
+  | .component => "component"
+  | .part      => "part"
+
+/-- Convert a Layer to a 3-letter abbreviation. -/
 def layerToAbbr (l : VerifiedMBSE.VV.Layer) : String :=
-  match l with | .system => "SYS" | .subsystem => "SUB" | .component => "CMP"
+  match l with
+  | .mission   => "MIS"
+  | .system    => "SYS"
+  | .segment   => "SEG"
+  | .subsystem => "SUB"
+  | .assembly  => "ASY"
+  | .unit      => "UNI"
+  | .component => "CMP"
+  | .part      => "PRT"
 
 end VerifiedMBSE.Output

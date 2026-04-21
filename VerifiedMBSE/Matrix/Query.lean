@@ -37,12 +37,20 @@ def VMatrix.totalRecords (m : VMatrix) : Nat :=
 -- §2  Diagnostics
 -- ============================================================
 
-/-- Summary string for a VVRecord. -/
+/-- Summary string for a VVRecord.
+
+    F5 で Layer が 8 階層に拡張されたため、全 constructor に対して 3 文字の
+    略語を割り当てる。ECSS-E-ST-10C 相当の表記を使う。 -/
 def VVRecord.summary (r : VVRecord) : String :=
   let layerStr := match r.layer with
+    | .mission   => "MIS"
     | .system    => "SYS"
+    | .segment   => "SEG"
     | .subsystem => "SUB"
+    | .assembly  => "ASY"
+    | .unit      => "UNI"
     | .component => "CMP"
+    | .part      => "PRT"
   let confStr := toString r.validation.currentLevel
   s!"[{layerStr}] {r.spec_name} (confidence: {confStr})"
 

@@ -17,7 +17,8 @@ This document explains the type-theoretic foundations, key design decisions, and
 ```
                  ┌──────────────────────────────────────────┐
                  │  Examples/Spacecraft/                     │
-                 │  EPS, AOCS, TCS, TTC, Satellite          │
+                 │  EPS, AOCS, TCS, TTC, Satellite,         │
+                 │  Integration, F1F2/F3F5F6/F8 Tests       │
                  └──────────────┬───────────────────────────┘
                                 │ uses
   ┌─────────────────────────────┼───────────────────────────────┐
@@ -26,15 +27,16 @@ This document explains the type-theoretic foundations, key design decisions, and
   │  Output/  ←──  Matrix/  ←──  VV/  ←──  Behavior/  ←──  Core/
   │                                                             │
   │  SysML v2       VColumn     SubSystem   StateMachine  KerMLType
-  │  Markdown       VMatrix     Spec        Temporal      PartDef
-  │  Terminal       Query       VVBundle    FDIR          Connector
-  │                             Evidence                  System
+  │  Markdown       VMatrix     Spec        KripkeStruct  PartDef
+  │  Terminal       Query       Contract    ProductKripke Connector
+  │                 ModelBd.    Evidence    Temporal      System
+  │                             Layer(8)    FDIR          Specialization
   │                                                             │
   │  Equivalence/ (independent, imports Core/ only)             │
   └─────────────────────────────────────────────────────────────┘
 ```
 
-**Import rule:** Core ← Behavior ← VV ← Matrix ← Output. No reverse imports.
+**Import rule:** Core ← Behavior ← VV ← Matrix ← Output. No reverse imports. `Equivalence` depends only on `Core`.
 
 ## Core Layer: KerML Semantics
 
@@ -52,7 +54,7 @@ instance : Preorder KerMLType where
   le_trans := specializes_trans
 ```
 
-This enables `≤` notation and Mathlib's order infrastructure.
+This enables `≤` notation and Mathlib's order infrastructure. The old data-level `Specialization.trans` (which received hypotheses but did not use them) was removed in favor of the propositional-only `specializes_trans` (F3).
 
 ### Model-Theoretic Semantics
 
@@ -71,6 +73,17 @@ theorem soundness (I : Interpretation) (hI : InterpretationRespects I)
     {a b : KerMLType} (hab : specializes a b) :
     semanticSpecializes I a b
 ```
+
+### Interpretation Pattern (F8)
+
+Naive `match t.name with | some "Foo" => FooType | _ => Unit` has three pitfalls:
+typo-induced silent unsoundness, unchecked case omission on model extension,
+and no mechanical way to prove `InterpretationRespects I`.
+
+The recommended pattern uses a domain-specific `TypeTag` enum with exhaustive
+pattern match, keeping string comparison confined to a single `fromName` helper.
+See `docs/InterpretationPattern.md` and `Examples/Spacecraft/EPS.lean` §6 for
+the full pattern and worked example.
 
 ### Port Compatibility via Conjugation
 
@@ -121,31 +134,84 @@ theorem Reachable.inv_holds {sm : StateMachine S D inv} {s d}
 
 This is `□(inv)` in LTL: the invariant holds in every reachable state.
 
+### KripkeStructure + ToKripke Type Class (B-1)
+
+Temporal operators are defined over an abstract `KripkeStructure`:
+
+```lean
+structure KripkeStructure (State Data : Type) where
+  inv                      : State → Data → Prop
+  reachable                : State → Data → Prop
+  reachable_inv            : ∀ s d, reachable s d → inv s d
+  step                     : State → Data → State → Data → Prop
+  step_preserves_reachable : ∀ s d s' d', reachable s d → step s d s' d' → reachable s' d'
+
+class ToKripke (α : Type) (State : outParam Type) (Data : outParam Type) where
+  toKripke : α → KripkeStructure State Data
+```
+
+`StateMachine`, `ProductStateMachine`, and `ProductKripke` all provide `ToKripke`
+instances, so `Always sm P` / `Always psm P` / `Always pk P` all resolve to the
+same underlying predicate shape. This decouples the LTL API from any particular
+behavioral model and leaves room for continuous-time / hybrid extensions (F10).
+
 ### LTL Embedding
 
-Temporal operators are propositions over `Reachable`:
+Temporal operators are propositions over `reachable`:
 
 | LTL | Lean 4 | Type |
 |-----|--------|------|
-| □ P | `Always sm P` | `∀ s d, Reachable sm s d → P s d` |
-| ◇ P | `Eventually sm P` | `∃ s d, Reachable sm s d ∧ P s d` |
-| P ⇒ ◇ Q | `Leads sm P Q` | `Always sm (P → Eventually sm Q)` |
+| □ P | `Always x P` | `∀ s d, (toKripke x).reachable s d → P s d` |
+| ◇ P | `Eventually x P` | `∃ s d, (toKripke x).reachable s d ∧ P s d` |
+| P ⇒ ◇ Q | `Leads x P Q` | `Always x (P → Eventually x Q)` |
+
+where `x : α` ranges over any `ToKripke`-instance type.
+
+### ProductKripke: N-way Nested Composition (B-8)
+
+Before B-8, product state machines were `ProductStateMachine sm₁ sm₂` — both
+arguments had to be concrete `StateMachine`s, so 3-way nesting
+(`ProductStateMachine psm₁₂ sm₃`) was a type error.
+
+B-8 generalizes the product type to accept any `ToKripke` instances:
+
+```lean
+structure ProductKripke
+    {α β : Type} {S₁ D₁ S₂ D₂ : Type}
+    [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
+    (x : α) (y : β) : Type where
+  mk ::
+
+-- ProductStateMachine is now an abbrev for backward compatibility
+abbrev ProductStateMachine (sm₁ : StateMachine ...) (sm₂ : StateMachine ...) :=
+  ProductKripke sm₁ sm₂
+```
+
+This enables `ProductKripke (pk : ProductKripke ...) sm₃`, unlocking N-way
+nested composition. The `SubSystemSpec.compose` function was likewise
+generalized to take `NonEmpty` witnesses (weakened from `WellFormed`), so
+3-subsystem nesting composes by feeding `spec₁₂.behavioral.nonEmpty` as the
+left NonEmpty argument of the next compose.
 
 ### FDIR as a Type
 
 ```lean
-structure FDIRSpec (sm) (isFault isNominal isSafe) : Prop where
-  safety    : Always sm (fun _ d => isSafe d)        -- □(safe)
-  detection : Eventually sm (fun s _ => isFault s)    -- ◇(fault)
-  recovery  : Leads sm (fun s _ => isFault s)         -- fault ⇒ ◇ recovery
-              (fun s _ => isNominal s)
+structure FDIRBundle {α : Type} {S D : Type} [ToKripke α S D] (x : α) where
+  isFault    : S → Prop
+  isRecovery : S → Prop
+  isSafe     : D → Prop
+  safety     : Always x (fun _ d => isSafe d)        -- □(safe)
+  detection  : Eventually x (fun s _ => isFault s)    -- ◇(fault)
+  recovery   : Leads x (fun s _ => isFault s) (fun s _ => isRecovery s)
 ```
 
-Constructing a `FDIRSpec` value = mechanically verifying all three FDIR requirements.
+Constructing a `FDIRBundle` value = mechanically verifying all three FDIR requirements.
+`FDIRBundle.compose` lifts two FDIR bundles to the product, combining
+`isFault` / `isRecovery` as disjunctions and `isSafe` as a conjunction.
 
 ## VV Layer: Evidence Hierarchy
 
-### ValidationEvidence: Three Levels of Confidence
+### ValidationEvidence: Three Levels of Confidence (F1, F2)
 
 ```
 confidence (Float)     ←  Weakest. Early design assumptions.
@@ -155,15 +221,52 @@ contract (Prop → P)    ←  Middle. Test/simulation-backed.
 trusted (P)            ←  Strongest. Accepted as axiomatic.
 ```
 
-`ValidationTrace` records the promotion history for audit trails.
-
-### SubSystemSpec: One Type to Rule Them All
+Record generators take evidence as a default argument, so users can override:
 
 ```lean
-structure SubSystemSpec (S D : Type) (inv : S → D → Prop) where
-  structural : StructuralSpec          -- parts + connectors + WellFormed
-  behavioral : BehavioralSpec S D inv  -- state machine + WellFormed
-  fdir       : FDIRBundle behavioral.sm -- safety + detection + recovery
+-- Default: .trusted (backward compatible)
+def r1 : VVRecord := epsSpec.safetyRecord
+
+-- Explicit .contract: assumption-dependent
+def r1' : VVRecord := epsSpec.safetyRecord
+  (ev := .contract SomeAssumption (fun h => ...))
+
+-- Explicit .confidence: probabilistic
+def r1'' : VVRecord := epsSpec.safetyRecord (ev := .confidence 0.7)
+```
+
+`VColumn.fullyTrusted` checks the trace by **constructor discrimination**
+(`ValidationEvidence.isTrusted`), not by `currentLevel == 1.0` Float equality.
+This avoids the degenerate case where `.confidence 1.0` would falsely satisfy
+Float equality but represent a structurally non-trusted evidence (F2).
+
+### Layer: 8 Levels (ECSS-E-ST-10C, F5)
+
+```
+| Layer     | depth | ECSS role                          |
+|-----------|-------|-------------------------------------|
+| mission   | 0     | Mission as a whole                  |
+| system    | 1     | Spacecraft / ground station         |
+| segment   | 2     | Space / ground segment              |
+| subsystem | 3     | AOCS / EPS / TCS / TTC              |
+| assembly  | 4     | Avionics box, valve cluster         |
+| unit      | 5     | Sensor, MCU                         |
+| component | 6     | ADC IC, motor (project-specific)    |
+| part      | 7     | Resistor, bolt                      |
+```
+
+`Layer.supports l1 l2 := l1.depth > l2.depth` — depth-based rather than
+pattern-matched, so new layers don't require code changes in `supports_trans` /
+`supports_irrefl`. The relation is `Decidable` via `Nat.decLt`, making
+`by decide` work for layer ordering facts.
+
+### SubSystemSpec: One Type to Rule Them All (B-7)
+
+```lean
+structure SubSystemSpec {α : Type} {S D : Type} [ToKripke α S D] (x : α) where
+  structural : StructuralSpec
+  behavioral : BehavioralSpec x       -- just NonEmpty (Kripke-generalized)
+  fdir       : FDIRBundle x
 ```
 
 From one `SubSystemSpec`, the framework auto-derives:
@@ -172,6 +275,27 @@ From one `SubSystemSpec`, the framework auto-derives:
 - `recoveryRecord` (R3 VVRecord)
 - `SubSystemVVBundle.allRecords` (all VVRecords for this subsystem)
 
+`SubSystemSpec.compose` takes two specs and produces the composed spec on
+`ProductKripke x y`, calling `StructuralSpec.compose` (names are joined as
+`"A+B"`), `BehavioralSpec.compose` (uses `ProductKripke.nonEmpty`), and
+`FDIRBundle.compose`.
+
+### ModelBoundary: Dependently Typed on VMatrix (F6)
+
+```lean
+structure ModelBoundary (vm : VMatrix) where
+  systemName : String
+  nonFormal  : List NonFormalProperty
+  unmodeled  : List UnmodeledRisk
+
+def ModelBoundary.verifiedCount {vm : VMatrix} (_ : ModelBoundary vm) : Nat :=
+  vm.totalRecords   -- auto-derived from the bound VMatrix
+```
+
+The VMatrix is baked into the type, so accidentally mixing a `ModelBoundary`
+for system A with the `VMatrix` of system B is a type error. `verifiedCount`
+stays in sync with `vm.totalRecords` automatically — no manual bookkeeping.
+
 ## Proof Patterns
 
 | Pattern | Tactic | When to use |
@@ -179,9 +303,12 @@ From one `SubSystemSpec`, the framework auto-derives:
 | `by simp [defName]` | Definition unfolding | WellFormed, PortRef.mem |
 | `by cases x <;> simp [...] <;> omega` | Finite enumeration | Power budgets, mode enumeration |
 | `by native_decide` | Decidable Bool propositions | allLayersCovered, totalRecords |
+| `by decide` | Decidable with Nat / enum values | Layer.supports, isTrusted |
 | `fun _ _ h => h.inv_holds` | Direct invariant application | Always proofs (□ inv) |
 | `Reachable.step t hr ... rfl trivial` | Reachability construction | Eventually, Leads |
+| `hr.fst_reachable` / `hr.snd_reachable` | Product projection | Always_prod / Eventually_prod lifting |
 | `by constructor; ... <;> native_decide` | VMatrix.Complete | Completeness proofs |
+| `cases tag <;> rfl` | Exhaustive tag enum | Interpretation soundness, round-trip |
 
 ## Equivalence Layer: HoTT Connections
 
@@ -210,3 +337,26 @@ def tcsInvariant : TCSMode → Nat → Prop
 ```
 
 The safety theorem `Reachable.inv_holds` now returns a **different proposition depending on which mode was reached** — this is genuine dependent typing, not just parameterization.
+
+## Milestone History
+
+| ID | Title | Outcome |
+|----|-------|---------|
+| B-1 | KripkeStructure + ToKripke type class | Unified LTL API across models |
+| B-4 | ProductStateMachine → ToKripke instance | 2-way product composition |
+| B-6 | FDIRBundle.compose | Product-level FDIR |
+| B-7 | SubSystemSpec Kripke generalization | Unified subsystem representation |
+| B-8 | ProductKripke: heterogeneous nested product | **N-way nested composition** |
+| F1 | Evidence-level parameterization | `.contract` / `.confidence` record generation |
+| F2 | fullyTrusted constructor discrimination | Eliminated Float-equality dependence |
+| F3 | Specialization.trans dead code removal | Only propositional `specializes_trans` |
+| F4 | FDIR composition theorems | Product safety / detection / recovery |
+| F5 | Layer 8-level ECSS-E-ST-10C | depth-based supports, decidable |
+| F6 | ModelBoundary (vm : VMatrix) | Type-level V-matrix binding |
+| F7 | SubSystemSpec.compose for nested products | 3+ subsystem composition proven |
+| F8 | Interpretation pattern (TypeTag enum) | Exhaustive dispatch, no silent unsoundness |
+
+**Deferred:**
+- F9 (LTL type-class refactoring): subsumed by B-1/B-4/B-8 — no separate work needed.
+- F10 (continuous-time / hybrid example): deferred to downstream projects (e.g. SafeSwarm CBF).
+- B-8d (variadic composition API): optional; 2-ary `compose` with nesting suffices so far.

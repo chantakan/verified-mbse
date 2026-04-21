@@ -45,7 +45,27 @@ private def padList (xs : List String) (n : Nat) : List String :=
 private def rightpad (s : String) (n : Nat) : String :=
   s ++ String.ofList (List.replicate (n - s.length) ' ')
 
-/-- Convert a VMatrix to a Markdown table string. -/
+/-- Layer を Markdown 表ラベル (Title case) に変換する。
+
+    F5 で Layer が 8 階層に拡張されたため、全 constructor に対応する
+    ラベルを与える。 -/
+private def layerTitleCase (l : Layer) : String :=
+  match l with
+  | .mission   => "Mission"
+  | .system    => "System"
+  | .segment   => "Segment"
+  | .subsystem => "Subsystem"
+  | .assembly  => "Assembly"
+  | .unit      => "Unit"
+  | .component => "Component"
+  | .part      => "Part"
+
+/-- Convert a VMatrix to a Markdown table string.
+
+    描画対象の Layer リストは従来通り `[.system, .subsystem, .component]` の
+    3 階層に絞っている（既存の衛星例は 3 階層しか埋めていないため）。将来
+    ECSS 準拠の 7 階層テーブルが必要になったら、この `layers` リストを
+    拡張するだけで対応可能。 -/
 def VMatrix.toMarkdown (m : VMatrix) (title : String := "Satellite") : String :=
   let cols := m.columns
   let totalRecs := m.totalRecords
@@ -59,7 +79,7 @@ def VMatrix.toMarkdown (m : VMatrix) (title : String := "Satellite") : String :=
   -- Generate rows for each layer
   let layers : List Layer := [.system, .subsystem, .component]
   let layerRows := layers.map fun l =>
-    let lName := match l with | .system => "System" | .subsystem => "Subsystem" | .component => "Component"
+    let lName := layerTitleCase l
     let nRows := maxCells cols l
     let paddedCols := cols.map fun col => padList (columnCells col l) nRows
     -- Each row

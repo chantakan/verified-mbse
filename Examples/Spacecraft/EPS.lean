@@ -213,15 +213,95 @@ theorem epsVVBundle_count :
   simp [SubSystemVVBundle.allRecords, epsVVBundle]
 
 -- ============================================================
--- §6  StateMachineComponent (Phase 2/3 接続)
+-- §6  StateMachineComponent (Phase 2/3 接続) — F8 Interpretation パターン
 -- ============================================================
 
-def EPSNatInterpretation : Interpretation := fun t =>
-  match t.name with
-  | some "PowerSupply" => Nat | some "Load" => Nat
-  | some "PowerPort"   => Nat | some "~PowerPort" => Nat
-  | _ => Unit
+/-!
+## F8 Interpretation パターン適用
 
+旧版は `EPSNatInterpretation` の本体で直接 `match t.name with | some "PowerSupply" ... | _ => Unit`
+を書いていた。これは typo 時の silent unsoundness（`_ => Unit` に流れて Unit は全述語を
+満たしてしまう）や、モデル拡張時の case 漏れなどのリスクがあった。
+
+本節では `docs/InterpretationPattern.md` の推奨パターンに沿って:
+
+1. ドメイン固有の `EPSTypeTag` enum を定義（PowerSupply/Load/PowerPort/~PowerPort を網羅）
+2. enum と KerMLType の紐付けを `toName` / `toKerMLType` に集約
+3. 逆引き `fromName : Option String → Option EPSTypeTag` を 1 箇所に閉じ込め
+4. 担体型割当 `interp : EPSTypeTag → Type` を **`_` なしの網羅的 pattern match** で
+5. `EPSNatInterpretation` は `fromName ∘ interp` の合成として構築
+
+これにより、EPS に新型を追加したい場合は `EPSTypeTag` に case を足すだけで
+コンパイラが未網羅エラーを出してくれる（文字列の typo は `fromName` の中だけに閉じ込め）。
+-/
+
+/-- EPS サブシステムに出現する全 KerMLType の識別子. -/
+inductive EPSTypeTag where
+  /-- 電力供給器パーツ (`PowerSupply : PartDef`). -/
+  | powerSupply
+  /-- 電力負荷パーツ (`Load : PartDef`). -/
+  | load
+  /-- 電力フローポート (`EPSPowerPort`). -/
+  | powerPort
+  /-- 共役電力ポート (`EPSConjPowerPort` = `~PowerPort`). -/
+  | powerPortConj
+  deriving Repr, BEq, DecidableEq
+
+/-- Tag から KerMLType の `name` 文字列へ。文字列リテラルが現れるのはこの関数のみ。 -/
+def EPSTypeTag.toName : EPSTypeTag → String
+  | .powerSupply   => "PowerSupply"
+  | .load          => "Load"
+  | .powerPort     => "PowerPort"
+  | .powerPortConj => "~PowerPort"
+
+/-- Tag から KerMLType への埋め込み（1 対 1）。 -/
+def EPSTypeTag.toKerMLType (tag : EPSTypeTag) : KerMLType :=
+  { name := some tag.toName }
+
+/-- 逆引き: KerMLType の name から Tag へ。文字列マッチはこの関数の中に集約される。
+    ドメイン外の型名は `none` を返す。 -/
+def EPSTypeTag.fromName : Option String → Option EPSTypeTag
+  | some "PowerSupply"  => some .powerSupply
+  | some "Load"         => some .load
+  | some "PowerPort"    => some .powerPort
+  | some "~PowerPort"   => some .powerPortConj
+  | _                   => none
+
+/-- 各 tag の担体型割当。**網羅的 pattern match**（`_` なし）。
+    EPS に新 tag を追加するとここで未網羅エラーが出る → 対応を忘れる事故を防ぐ。 -/
+def EPSTypeTag.interp : EPSTypeTag → Type
+  | .powerSupply   => Nat
+  | .load          => Nat
+  | .powerPort     => Nat
+  | .powerPortConj => Nat
+
+/-- EPS の Interpretation（F8 パターン適用）。
+
+    ## 設計
+
+    - 文字列マッチは `fromName` の 1 箇所に閉じ込められている。
+    - 担体型割当は `interp` の網羅的 pattern match で保証される。
+    - ドメイン外の型名は `Unit`（既存互換。SafeSwarm で厳格化する場合は `Empty` へ）。 -/
+def EPSNatInterpretation : Interpretation := fun t =>
+  match EPSTypeTag.fromName t.name with
+  | some tag => tag.interp
+  | none     => Unit
+
+/-- リファクタ前後で挙動が一致することの健全性チェック: 既存の 4 型では Nat を返す. -/
+theorem EPSNatInterpretation_powerSupply :
+    EPSNatInterpretation { name := some "PowerSupply" } = Nat := rfl
+
+theorem EPSNatInterpretation_load :
+    EPSNatInterpretation { name := some "Load" } = Nat := rfl
+
+theorem EPSNatInterpretation_powerPort :
+    EPSNatInterpretation { name := some "PowerPort" } = Nat := rfl
+
+theorem EPSNatInterpretation_powerPortConj :
+    EPSNatInterpretation { name := some "~PowerPort" } = Nat := rfl
+
+/-- 既存の StateMachineComponent は `PowerSupply.baseType` (= `{ name := some "PowerSupply" }`)
+    を通して `EPSNatInterpretation` に問い合わせるため、リファクタ後も型整合. -/
 def epsStateMachineComponent :
     StateMachineComponent EPSNatInterpretation PowerSupply EPSMode epsGlobalInv :=
   { compat := fun _ _ _ => trivial, sm := epsSM }

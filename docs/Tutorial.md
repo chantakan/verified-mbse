@@ -149,15 +149,20 @@ theorem prop_fault_leads_to_idle :
     Reachable.step propFaultToIdle hr (by simp [propSM]) rfl trivial, rfl⟩
 ```
 
-## Step 7: Bundle into SubSystemSpec
+## Step 7: Bundle into SubSystemSpec (B-7 Kripke-generalized)
+
+Since B-7, `SubSystemSpec` is parameterized by `{α : Type} [ToKripke α S D] (x : α)`,
+so you pass the state machine directly (its `ToKripke` instance is resolved automatically).
+`BehavioralSpec` carries only a `nonEmpty` witness (Kripke-level), derived from
+`WellFormed`:
 
 ```lean
 def propStructural : StructuralSpec :=
   StructuralSpec.mk' "PROP" [PropController, Thruster] [thrustConnector]
     PROPSystem_WellFormed
 
-def propBehavioral : BehavioralSpec PROPMode Nat propGlobalInv :=
-  { sm := propSM, wellFormed := propSM_WellFormed }
+def propBehavioral : BehavioralSpec propSM :=
+  { nonEmpty := propSM_WellFormed.nonEmpty }
 
 def propFDIR : FDIRBundle propSM :=
   { isFault    := fun s => s = .fault
@@ -167,7 +172,7 @@ def propFDIR : FDIRBundle propSM :=
     detection  := prop_eventually_fault
     recovery   := prop_fault_leads_to_idle }
 
-def propSpec : SubSystemSpec PROPMode Nat propGlobalInv :=
+def propSpec : SubSystemSpec propSM :=
   { structural := propStructural
     behavioral := propBehavioral
     fdir       := propFDIR }
@@ -192,6 +197,27 @@ theorem propVVBundle_count :
 - Subsystem WellFormed record (1, auto-derived from `propSpec`)
 - R1 Safety record (1, auto-derived)
 - R3 Recovery record (1, auto-derived)
+
+### Using `.contract` or `.confidence` evidence (F1)
+
+The auto-derived records default to `.trusted` evidence (backward compatible).
+To generate a VVRecord backed by a weaker evidence level, pass an explicit
+`ValidationEvidence` via the `ev :=` named argument:
+
+```lean
+-- R1 record, but flagged as contract-level (test-verified, not yet proven in Lean)
+def propR1_contract : VVRecord :=
+  propSpec.safetyRecord
+    (ev := .contract SomeAssumption (fun h => prop_always_safe_modulo_h h))
+
+-- R1 record based on expert judgment (70% confidence)
+def propR1_early : VVRecord :=
+  propSpec.safetyRecord (ev := .confidence 0.7)
+```
+
+`VColumn.fullyTrusted` discriminates on the evidence constructor (not on
+`currentLevel == 1.0` Float equality), so mixing `.trusted` and `.contract`
+records in a column correctly reports `fullyTrusted = false`.
 
 ## Step 9: Add to VMatrix
 
@@ -220,6 +246,83 @@ theorem mySatellite_Complete :
 #eval IO.println (mySatellite.toMarkdown "MySatellite")
 ```
 
+## (Optional) Step 11: Compose Multiple Subsystems (B-8)
+
+For integration-level verification (FDIR of the joint system), compose
+two subsystems into a product spec:
+
+```lean
+-- 2-way composition
+def epsPropPK : ProductKripke epsSM propSM := ⟨⟩
+
+def epsPropSpec : SubSystemSpec epsPropPK :=
+  SubSystemSpec.compose epsSpec propSpec epsPropPK
+    epsSM_WellFormed.nonEmpty propSM_WellFormed.nonEmpty
+    [] (by intros; contradiction)
+```
+
+The composed `SubSystemSpec`:
+- Names the joint system `"EPS+PROP"`
+- Produces FDIR with `isFault := epsFault ∨ propFault`, `isSafe := epsSafe ∧ propSafe`
+- Exposes `safetyRecord` / `recoveryRecord` / `subsystemRecord` at the joint level
+
+For **3 or more subsystems**, nest the compositions — the second-level
+`NonEmpty` comes from `.behavioral.nonEmpty`:
+
+```lean
+def epsPropTcsPK : ProductKripke epsPropPK tcsSM := ⟨⟩
+
+def epsPropTcsSpec : SubSystemSpec epsPropTcsPK :=
+  SubSystemSpec.compose epsPropSpec tcsSpec epsPropTcsPK
+    epsPropSpec.behavioral.nonEmpty tcsSM_WellFormed.nonEmpty
+    [] (by intros; contradiction)
+```
+
+See `Examples/Spacecraft/Integration.lean` for a working `(EPS × Mini) × Mini2` example.
+
+## (Optional) Step 12: Define an Interpretation (F8 Pattern)
+
+If your subsystem participates in `StateMachineComponent` (integrates structure
+with behavior via a model-theoretic interpretation), follow the recommended
+pattern in `docs/InterpretationPattern.md`:
+
+1. Define a `TypeTag` enum listing every `KerMLType` in the subsystem.
+2. Write `toName` / `toKerMLType` (forward) and `fromName` (reverse).
+3. Define the type assignment `interp : Tag → Type` **exhaustively** (no `_` case).
+4. Compose the `Interpretation` using `fromName` for string matching and
+   `interp` for type assignment.
+
+```lean
+inductive PROPTypeTag where
+  | propController | thruster | thrustPort | thrustPortConj
+  deriving Repr, BEq, DecidableEq
+
+def PROPTypeTag.toName : PROPTypeTag → String
+  | .propController  => "PropController"
+  | .thruster        => "Thruster"
+  | .thrustPort      => "ThrustPort"
+  | .thrustPortConj  => "~ThrustPort"
+
+def PROPTypeTag.fromName : Option String → Option PROPTypeTag
+  | some "PropController" => some .propController
+  | some "Thruster"       => some .thruster
+  | some "ThrustPort"     => some .thrustPort
+  | some "~ThrustPort"    => some .thrustPortConj
+  | _                     => none
+
+def PROPTypeTag.interp : PROPTypeTag → Type
+  | .propController | .thruster | .thrustPort | .thrustPortConj => Nat
+
+def PROPNatInterpretation : Interpretation := fun t =>
+  match PROPTypeTag.fromName t.name with
+  | some tag => tag.interp
+  | none     => Unit
+```
+
+This keeps string literals confined to `fromName`, guarantees soundness for
+every tag via exhaustive match, and adding a new PartDef only requires
+adding a constructor to the enum (the compiler flags missing cases).
+
 ## Checklist
 
 When adding a new subsystem, you need:
@@ -234,9 +337,11 @@ When adding a new subsystem, you need:
 - [ ] Transitions (each with `preserves` proof)
 - [ ] StateMachine + `WellFormed` theorem
 - [ ] FDIR theorems: Always (safety), Eventually (detection), Leads (recovery)
-- [ ] `SubSystemSpec` bundle
+- [ ] `SubSystemSpec sm` bundle (Kripke-generalized: pass the state machine, not `S D inv`)
 - [ ] `SubSystemVVBundle` with component records
 - [ ] `VColumn` + integration into `VMatrix`
 - [ ] `VMatrix.Complete` proof update
+- [ ] (Optional) Compose with other subsystems via `SubSystemSpec.compose`
+- [ ] (Optional) `TypeTag` enum + `Interpretation` per `docs/InterpretationPattern.md`
 
 If `lake build` passes with zero `sorry`, you're done.

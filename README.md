@@ -60,15 +60,33 @@ def epsSM : StateMachine EPSMode Nat (fun _ v => v ≤ 1000) where
 ### 3. Bundle everything into one `SubSystemSpec`
 
 ```lean
-def epsSpec : SubSystemSpec EPSMode Nat epsGlobalInv :=
+def epsSpec : SubSystemSpec epsSM :=
   { structural := epsStructural   -- System + WellFormed proof
-    behavioral := epsBehavioral   -- StateMachine + WellFormed
+    behavioral := epsBehavioral   -- NonEmpty (Kripke-generalized)
     fdir       := epsFDIR }       -- Safety + Detection + Recovery proofs
 ```
 
 This single value proves: the structure is well-formed, the state machine preserves its invariant, and all three FDIR requirements hold.
 
-### 4. Build the V-Matrix and prove completeness
+### 4. Compose subsystems (N-way nested composition supported)
+
+```lean
+-- 2 subsystems
+def epsAocsPK : ProductKripke epsSM aocsSM := ⟨⟩
+def epsAocsSpec : SubSystemSpec epsAocsPK :=
+  SubSystemSpec.compose epsSpec aocsSpec epsAocsPK
+    epsSM_WellFormed.nonEmpty aocsSM_WellFormed.nonEmpty [] (by intros; contradiction)
+
+-- 3 subsystems (nested) — enabled by B-8 ProductKripke generalization
+def epsAocsTcsPK : ProductKripke epsAocsPK tcsSM := ⟨⟩
+def epsAocsTcsSpec : SubSystemSpec epsAocsTcsPK :=
+  SubSystemSpec.compose epsAocsSpec tcsSpec epsAocsTcsPK
+    epsAocsSpec.behavioral.nonEmpty tcsSM_WellFormed.nonEmpty [] (by intros; contradiction)
+```
+
+The composed spec auto-derives FDIR safety / detection / recovery for the product.
+
+### 5. Build the V-Matrix and prove completeness
 
 ```lean
 open VerifiedMBSE.Matrix
@@ -83,7 +101,7 @@ theorem sat_complete : satellite.Complete ["EPS", "AOCS", "TCS", "TTC"] := by
   · intro col hcol; ... -- every column covers all layers
 ```
 
-### 5. Generate human-readable outputs
+### 6. Generate human-readable outputs
 
 ```lean
 open VerifiedMBSE.Output
@@ -114,33 +132,40 @@ VerifiedMBSE/
 ├── Core/                    # Domain-independent type-theoretic foundations
 │   ├── KerML.lean           #   Element, KerMLType, Feature, Direction
 │   ├── Port.lean            #   PortDef, Conjugation, compatible
-│   ├── Specialization.lean  #   Specialization (preorder), FeatureTyping, Redefinition
+│   ├── Specialization.lean  #   Specialization (preorder), FeatureTyping, Interpretation
 │   ├── Component.lean       #   PartDef, PortRef, Connector, System, WellFormed
 │   ├── Compose.lean         #   System.compose, compose_WellFormed
 │   └── Interpretation.lean  #   PartInstance, ConnectorSemantic, categorical laws
 │
-├── Behavior/                # Behavioral models
+├── Behavior/                # Behavioral models (Kripke-generalized LTL)
 │   ├── StateMachine.lean    #   Transition, StateMachine, Reachable, inv_holds
 │   ├── Temporal.lean        #   Always (□), Eventually (◇), Next, Until, Leads
+│   ├── KripkeStructure.lean #   KripkeStructure + ToKripke type class (B-1)
+│   ├── StateMachineKripke.lean #   StateMachine → KripkeStructure instance
+│   ├── StateMachineLTL.lean    #   Dot-notation for sm.Always / sm.Eventually
+│   ├── Product.lean         #   ProductStateMachine (abbrev of ProductKripke)
+│   ├── ProductKripke.lean   #   ProductKripke (N-way nested, B-8)
+│   ├── ProductTemporal.lean #   Always_prod / Eventually_prod / Leads_prod lifting
 │   └── FDIR.lean            #   FDIRSpec, StateMachineComponent
 │
 ├── VV/                      # Verification & Validation framework
-│   ├── Layer.lean           #   Layer (system/subsystem/component)
-│   ├── Evidence.lean        #   ValidationEvidence, ValidationTrace, VVRecord
+│   ├── Layer.lean           #   Layer (8-level ECSS-E-ST-10C: mission→part)
+│   ├── Evidence.lean        #   ValidationEvidence, isTrusted, ValidationTrace, VVRecord
 │   ├── SubSystemSpec.lean   #   StructuralSpec, BehavioralSpec, FDIRBundle, SubSystemSpec
 │   ├── VVBundle.lean        #   mkComponentRecord, SubSystemVVBundle, allRecords
 │   ├── Power.lean           #   ModePowerSpec, PowerBudgetOK₂
-│   ├── Propagation.lean     #   LayerPropagation, compose
+│   ├── Propagation.lean     #   LayerPropagation, depth-based supports
 │   ├── Contract.lean        #   Contract, ContractedSystem, CouplingConstraint
-│   └── ModelBoundary.lean   #   ModelBoundary, UnmodeledRisk, RiskCategory
+│   └── ProductFDIR.lean     #   FDIRBundle.compose, SubSystemSpec.compose (N-way)
 │
 ├── Matrix/                  # V-matrix construction
-│   ├── VColumn.lean         #   VColumn, atLayer, Complete
+│   ├── VColumn.lean         #   VColumn, atLayer, Complete, fullyTrusted (struct-discrim)
 │   ├── VMatrix.lean         #   VMatrix, SubSystemComplete, Complete
-│   └── Query.lean           #   column, cell, allRecords, summary
+│   ├── Query.lean           #   column, cell, allRecords, summary
+│   └── ModelBoundary.lean   #   ModelBoundary (vm : VMatrix) — dependently typed
 │
 ├── Output/                  # Human-readable output generation
-│   ├── Render.lean          #   indent, typeName, directionKeyword
+│   ├── Render.lean          #   indent, typeName, layerToAbbr (8-layer)
 │   ├── SysML.lean           #   → SysML v2 textual notation
 │   ├── StateMachineSysML.lean # → SysML v2 state def
 │   ├── Markdown.lean        #   → Markdown table
@@ -152,12 +177,16 @@ VerifiedMBSE/
     ├── Abstraction.lean     #   AbstractionLevel, DesignParameter
     └── Univalence.lean      #   DesignSpace (quotient), ua/ua_inv, Transport, Fiber
 
-Examples/Spacecraft/         # Full satellite case study (4 subsystems, 25 VVRecords)
-├── EPS.lean                 #   Electric Power Subsystem
+Examples/Spacecraft/         # Full satellite case study + acceptance tests
+├── EPS.lean                 #   Electric Power Subsystem (+ EPSTypeTag F8 pattern)
 ├── AOCS.lean                #   Attitude & Orbit Control
 ├── TCS.lean                 #   Thermal Control (mode-dependent invariants)
 ├── TTC.lean                 #   Telemetry, Tracking & Command
-└── Satellite.lean           #   V-Matrix construction + completeness proof
+├── Satellite.lean           #   V-Matrix + completeness + ModelBoundary
+├── Integration.lean         #   2-way and 3-way nested composition sanity tests
+├── F1F2Tests.lean           #   Evidence parameterization + mixed-evidence tests
+├── F3F5F6Tests.lean         #   Specialization preorder, Layer 8-level, ModelBoundary type-binding
+└── F8Tests.lean             #   Interpretation pattern (EPSTypeTag + exhaustive dispatch)
 ```
 
 ## Key Types at a Glance
@@ -169,12 +198,17 @@ Examples/Spacecraft/         # Full satellite case study (4 subsystems, 25 VVRec
 | `System.WellFormed` | All connectors reference valid parts | Structural soundness as a theorem |
 | `Transition.preserves` | Invariant preserved across state change | Transitions that break invariants are **unconstructible** |
 | `Reachable.inv_holds` | Safety theorem | Every reachable state satisfies the invariant — by induction |
+| `ToKripke α S D` | Type class lifting α to KripkeStructure | Unifies LTL over StateMachine / ProductKripke / future continuous-time |
+| `ProductKripke x y` | Heterogeneous product of Kripke structures | Enables N-way nested composition (3+ subsystems) |
 | `SubSystemSpec` | Structure + behavior + FDIR | One value = complete subsystem verification |
+| `SubSystemSpec.compose` | Parallel composition of two specs | Composes FDIR, spawns auto-derived bridge Records |
 | `VVRecord` | Machine proof + validation trace | The atomic unit of V&V evidence |
+| `ValidationEvidence` | `.trusted` / `.contract` / `.confidence` | 3-level confidence hierarchy; `isTrusted` by constructor (no Float equality) |
 | `VMatrix.Complete` | No gaps in the V-matrix | **The main theorem** — if it compiles, you're done |
 | `Contract` | Assume-guarantee pair with validity proof | Integration obligations become type errors when missing |
 | `ContractedSystem` | Contracts + coupling constraints, all discharged | Catches the "individually correct, jointly broken" failure mode |
-| `ModelBoundary` | Verified / tested / analyzed / unmodeled split | Makes "what the model does *not* cover" a first-class artifact |
+| `ModelBoundary (vm)` | **Dependently-typed** verified/tested/analyzed/unmodeled split | `verifiedCount` auto-derived from `vm.totalRecords` — no manual sync |
+| `Layer` | 8 levels: mission → part (ECSS-E-ST-10C) | depth-based `supports` relation; new levels added without case explosion |
 | `DesignSpace` | `PartDef / ComponentEquiv` quotient | Univalence: equivalent components are equal in design space |
 | `ua` / `ua_inv` | Equiv ↔ equality in `DesignSpace` | HoTT univalence via setoid quotient — sorry-free |
 
@@ -183,15 +217,16 @@ Examples/Spacecraft/         # Full satellite case study (4 subsystems, 25 VVRec
 1. **Declarative.** Define a `SubSystemSpec`; proofs and VVRecords are derived.
 2. **Verifiable.** `lake build` = all proofs checked. Zero `sorry` = zero gaps.
 3. **Readable.** V-Matrix output in Markdown, terminal, and SysML v2 text.
-4. **Composable.** `System.compose_WellFormed` proves composition preserves correctness.
+4. **Composable.** N-way nested subsystem composition via `ProductKripke`.
 5. **Extensible.** Domain-independent core; spacecraft examples are separate.
+6. **Typed discipline.** `ModelBoundary (vm : VMatrix)`, `EPSTypeTag` enum for interpretations — structural checks over string matching.
 
 ## Documentation
 
 - **[API Reference](https://chantakan.github.io/verified-mbse/)** — doc-gen4 generated (auto-deployed via GitHub Pages)
 - **[Architecture Guide](docs/Architecture.md)** — Type-theoretic foundations, design decisions, proof patterns
 - **[Tutorial: Adding a New Subsystem](docs/Tutorial.md)** — Step-by-step walkthrough
-- **[Roadmap](docs/Roadmap.md)** — Implemented, deferred, and candidate future improvements
+- **[Interpretation Pattern](docs/InterpretationPattern.md)** — Best practices for `KerMLType → Type` interpretations (F8)
 
 ## Requirements
 
@@ -200,11 +235,13 @@ Examples/Spacecraft/         # Full satellite case study (4 subsystems, 25 VVRec
 
 ## Statistics
 
-| | Files | Lines | sorry |
-|---|---|---|---|
-| Library | 30 | 2,878 | 0 |
-| Examples | 6 | 2,536 | 0 |
-| **Total** | **36** | **5,414** | **0** |
+| | Files | Lines | sorry | warnings |
+|---|---|---|---|---|
+| Library (VerifiedMBSE/) | 36 | ~3,970 | 0 | 0 |
+| Examples (satellite + tests) | 10 | ~3,200 | 0 | 0 |
+| Acceptance tests | ~70 examples | — | — | — |
+
+Build: `lake build VerifiedMBSE` (176 jobs) + `lake build Examples` (185 jobs), all passing with zero sorry/warnings.
 
 ## License
 
