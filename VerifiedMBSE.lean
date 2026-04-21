@@ -23,6 +23,7 @@ import VerifiedMBSE.VV.Layer
 import VerifiedMBSE.VV.Evidence
 import VerifiedMBSE.VV.SubSystemSpec              -- B-6/B-7: FDIRBundle/BehavioralSpec/SubSystemSpec を ToKripke ベースに一般化
 import VerifiedMBSE.VV.ProductFDIR                -- B-6/B-7: FDIRBundle.compose, BehavioralSpec.compose, SubSystemSpec.compose
+import VerifiedMBSE.VV.VariadicCompose            -- B-8d: SubSystemPayload, composeMany (List ベース N 機合成)
 import VerifiedMBSE.VV.VVBundle
 import VerifiedMBSE.VV.Power
 import VerifiedMBSE.VV.Propagation

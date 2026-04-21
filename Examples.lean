@@ -18,3 +18,8 @@ import Examples.Spacecraft.Integration
 import Examples.Spacecraft.F1F2Tests
 import Examples.Spacecraft.F3F5F6Tests
 import Examples.Spacecraft.F8Tests
+
+-- ============================================================
+-- B-8d 可変長合成 API 受入条件テスト
+-- ============================================================
+import Examples.Spacecraft.VariadicComposeTests
