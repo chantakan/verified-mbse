@@ -1,50 +1,58 @@
 /-!
 # KripkeStructure: Semantic Foundation for LTL Operators
 
-LTL 演算子 (Always / Eventually / Leads) を `StateMachine` / `ProductStateMachine` /
-`ProductKripke` / 将来の連続時間系などに対して**共通 API** で使えるよう、
-到達可能性関係と不変条件・1 ステップ関係を抽象化した意味論基盤と、
-具体型 `α` を `KripkeStructure State Data` に持ち上げる型クラス `ToKripke` を提供する。
+Abstracts the reachability relation, invariant, and one-step relation
+so that LTL operators (`Always`, `Eventually`, `Leads`) share a common
+API across `StateMachine`, `ProductStateMachine`, `ProductKripke`, and
+future continuous-time systems.
 
-## 設計判断
+The `ToKripke` type class lifts a concrete type `α` to a
+`KripkeStructure State Data` value, which is what the LTL operators
+and Kripke-level lemmas actually consume.
 
-### なぜ `Coe` ではなく `ToKripke` 型クラスか
+## Design decisions
 
-`Coe (StateMachine S D inv) (KripkeStructure S D)` instance では、`inv` が α 側にのみ
-現れて β 側には出現しないため、Lean 4.30 の strict "semi-out-params" チェックで
-「`inv` が β から flow できない」としてエラーになる。
+### `ToKripke` type class rather than `Coe`
 
-`ToKripke` 型クラスを用意し、`State` と `Data` を `outParam` にすることで、
-instance matching は α の具体値 (例: `StateMachine TCSMode Nat tcsInvariant`) から
-直接走り、`inv` などの extra implicit args も含めて自然に解決される。
+A `Coe (StateMachine S D inv) (KripkeStructure S D)` instance fails
+Lean 4.30's strict "semi-out-params" check because `inv` appears in
+the source type but never in the target: the elaborator reports that
+`inv` cannot flow from the target back to the source.
 
-### なぜ `State` / `Data` を型パラメータにしたか
+`ToKripke` sidesteps this by making `State` and `Data` `outParam`s.
+Instance resolution matches directly on the concrete shape of `α`
+(e.g. `StateMachine TCSMode Nat tcsInvariant`), and extra implicit
+arguments such as `inv` are naturally resolved along the way.
 
-`KripkeStructure.State` / `.Data` が field projection として遅延展開されることによる
-elaborator 混乱 (特に `omega` が `Nat` と `K.Data` を区別できない事象) を回避するため、
-`structure KripkeStructure (State : Type) (Data : Type)` と型パラメータ化する。
+### `State` and `Data` as type parameters
 
-### B-8 での拡張: `inv` / `step` を Kripke 層に昇格
+Defining `structure KripkeStructure (State : Type) (Data : Type)` with
+explicit type parameters avoids elaborator confusion arising from
+field projections `K.State` / `K.Data` that would otherwise unfold
+lazily. In particular, tactics like `omega` would fail to recognize
+`Nat` as equal to a projected `K.Data`.
 
-B-8 以前は `reachable` のみが Kripke 層に存在した。B-8 で **`ProductKripke` の
-N 機ネスト合成** を実現するため、以下の追加フィールドを導入する:
+### Structure fields and the `ProductKripke` axiomatization
 
-| フィールド | 役割 |
+`KripkeStructure` carries four fields beyond `reachable`:
+
+| Field | Role |
 |---|---|
-| `inv` | システム不変条件。到達可能状態が満たす性質を Kripke 層で明示化 |
-| `reachable_inv` | 到達可能性 → 不変条件 の含意 (StateMachine の `Reachable.inv_holds` に対応) |
-| `step` | 1 ステップ遷移関係。インタリーブ積の「相手側不変、自分側 1 ステップ」を Kripke 層で表現 |
-| `step_preserves_reachable` | `step` が到達可能性を保存する (`ProductKripkeReachable.stepLeft/stepRight` の型チェックに必要) |
+| `inv` | System invariant: property that must hold at every reachable state. |
+| `reachable_inv` | Reachability implies the invariant (corresponds to `StateMachine.Reachable.inv_holds`). |
+| `step` | One-step transition relation, used to express the "one side advances while the other is frozen" pattern of interleaving products at the Kripke level. |
+| `step_preserves_reachable` | The `step` relation preserves reachability (required when type-checking `ProductKripkeReachable.stepLeft` / `.stepRight`). |
 
-これらは `ProductKripke x y` の `toKripke` instance が `x` 側 / `y` 側の
-`KripkeStructure` を参照して積を構築する際の公理基盤として機能する。
-`Always` / `Eventually` / `Leads` は `reachable` フィールドのみに依存するため、
-既存の型クラスベース API は後方互換のまま維持される。
+These fields form the axiomatic basis that `ProductKripke x y` relies on
+when its `toKripke` instance builds the product from the component
+Kripke structures on each side. `Always`, `Eventually`, and `Leads`
+depend only on `reachable`, so their type-class-based API is unaffected
+by the additional fields.
 
-## 使用例
+## Usage
 
 ```lean
--- `Always sm P` で ToKripke instance 経由に解決
+-- `Always sm P` resolves via the `ToKripke` instance.
 #check Always sm (fun s _ => s ≠ .fault)
 ```
 -/
@@ -55,35 +63,41 @@ namespace VerifiedMBSE.Behavior
 -- §1  KripkeStructure
 -- ============================================================
 
-/-- Kripke 構造: 到達可能性関係・不変条件・1 ステップ関係を抽象化した意味論基盤。
+/-- Kripke structure: abstract semantic foundation bundling a
+    reachability relation, an invariant, and a one-step transition
+    relation.
 
-    `State` と `Data` を型パラメータとして受け取ることで、elaborator が
-    field projection `K.State` / `K.Data` を遅延展開する問題を回避する。
+    `State` and `Data` are exposed as explicit type parameters (rather
+    than structure fields), which avoids elaborator confusion caused
+    by lazy unfolding of field projections `K.State` / `K.Data`.
 
-    ### フィールド一覧
+    ### Fields
 
-    - `inv`: システム不変条件。到達可能な全状態で成立するべき性質。
-    - `reachable`: 到達可能性関係。初期状態から有限ステップで到達できる
-      `(state, data)` のペアに対して成立する。
-    - `reachable_inv`: 到達可能性が不変条件を含意する公理。`StateMachine` の
-      `Reachable.inv_holds` に対応。
-    - `step`: 1 ステップ遷移関係。`(s, d)` から 1 ステップで `(s', d')` に
-      遷移する場合に成立する。
-    - `step_preserves_reachable`: `step` が到達可能性を保存する公理。-/
+    - `inv`: system invariant that must hold at every reachable state.
+    - `reachable`: reachability relation, holding on any `(state, data)`
+      pair reachable in finitely many steps from an initial state.
+    - `reachable_inv`: axiom stating that reachability implies the
+      invariant (the Kripke-level counterpart of
+      `StateMachine.Reachable.inv_holds`).
+    - `step`: one-step transition relation; `step s d s' d'` holds when
+      `(s, d)` transitions to `(s', d')` in one step.
+    - `step_preserves_reachable`: axiom stating that `step` preserves
+      reachability. -/
 structure KripkeStructure (State : Type) (Data : Type) where
-  /-- システムの不変条件。到達可能な全状態で成立する。 -/
+  /-- System invariant; holds at every reachable state. -/
   inv : State → Data → Prop
-  /-- 到達可能性関係。初期状態から有限ステップで到達できる `(s, d)` に対して成立。 -/
+  /-- Reachability relation; holds on any `(s, d)` reachable from an
+      initial state in finitely many steps. -/
   reachable : State → Data → Prop
-  /-- 到達可能性は不変条件を含意する。 -/
+  /-- Reachability implies the invariant. -/
   reachable_inv : ∀ s d, reachable s d → inv s d
-  /-- 1 ステップ遷移関係。`(s, d)` から 1 ステップで `(s', d')` に遷移する。 -/
+  /-- One-step transition relation: `(s, d)` transitions to `(s', d')`. -/
   step : State → Data → State → Data → Prop
-  /-- step で到達可能状態から到達可能状態へ遷移する。 -/
+  /-- `step` sends reachable states to reachable states. -/
   step_preserves_reachable :
     ∀ s d s' d', reachable s d → step s d s' d' → reachable s' d'
 
-/-- Kripke 構造が**空でない**: 到達可能な `(s, d)` が少なくとも 1 つ存在する。 -/
+/-- The Kripke structure is non-empty: at least one `(s, d)` is reachable. -/
 def KripkeStructure.NonEmpty {State Data : Type}
     (K : KripkeStructure State Data) : Prop :=
   ∃ (s : State) (d : Data), K.reachable s d
@@ -92,19 +106,23 @@ def KripkeStructure.NonEmpty {State Data : Type}
 -- §2  ToKripke Type Class
 -- ============================================================
 
-/-- `ToKripke α State Data`: 型 `α` の値を `KripkeStructure State Data` に
-    持ち上げる方法を提供する型クラス。
+/-- `ToKripke α State Data` provides a method for lifting values of
+    `α` to `KripkeStructure State Data`.
 
-    `State` と `Data` は `outParam` にしているため、`α` の具体値から instance
-    resolution で自動的に決定される。これにより `Always sm P` (sm : StateMachine S D inv)
-    のような呼び出しで、`P : S → D → Prop` として `S, D` が明示的に elaborate される。
+    `State` and `Data` are `outParam`s, so instance resolution
+    determines them automatically from the concrete shape of `α`.
+    This lets calls such as `Always sm P` (`sm : StateMachine S D inv`)
+    elaborate `P : S → D → Prop` with `S` and `D` pinned down.
 
-    instance を追加する対象 (B-8 時点):
-    - `StateMachine S D inv` (B-1 で提供)
-    - `ProductStateMachine sm₁ sm₂` (B-4 で提供、B-8b で `ProductKripke` に統合予定)
-    - 連続時間系の到達可能性抽象 (F10 で拡張予定) -/
+    Instances are provided for:
+    - `StateMachine S D inv`
+    - `ProductKripke x y` (which subsumes `ProductStateMachine sm₁ sm₂`
+      as an `abbrev`)
+
+    Continuous-time reachability abstractions can be registered via
+    further `ToKripke` instances. -/
 class ToKripke (α : Type) (State : outParam Type) (Data : outParam Type) where
-  /-- α から KripkeStructure State Data への変換。 -/
+  /-- Conversion from `α` to `KripkeStructure State Data`. -/
   toKripke : α → KripkeStructure State Data
 
 end VerifiedMBSE.Behavior

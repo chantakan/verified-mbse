@@ -1,47 +1,39 @@
 /-!
-# V-Model Design Layers (ECSS-E-ST-10C Compliant, F5)
+# V-Model Design Layers (ECSS-E-ST-10C Compliant)
 
-## 概要
+## Overview
 
-ECSS-E-ST-10C の 7 階層 (mission/system/segment/subsystem/assembly/unit/part) に
-プロジェクト固有の `component` を加えた 8 階層。後方互換のため、旧 3 階層
-`.system` / `.subsystem` / `.component` は同じ constructor 名を維持する。
+Eight layers: the seven ECSS-E-ST-10C layers
+(mission, system, segment, subsystem, assembly, unit, part) plus a
+project-specific `component` layer inserted between `unit` and `part`.
 
-## 順序付け: depth ベース
+## Depth-based ordering
 
-各 Layer に 0〜7 の整数 `depth` を割り当て、`Ord` instance と
-`Layer.supports` 関係を depth 比較で統一する。depth が大きいほど下層
-（分解が進んだ側）。
+Each `Layer` is assigned an integer `depth` in the range `0..7`, and
+the `Ord` instance together with the `Layer.supports` relation are
+defined uniformly in terms of this `depth`. A larger depth denotes
+a lower layer (further decomposition).
 
-| Layer     | depth | 説明 |
-|-----------|-------|------|
-| mission   | 0     | ミッション全体 |
-| system    | 1     | 宇宙機 1 機または地上局全体 |
-| segment   | 2     | Space segment / Ground segment 等の大区分 |
-| subsystem | 3     | AOCS, EPS, TCS 等 |
-| assembly  | 4     | 組立体: アビオ箱、バルブ組 |
-| unit      | 5     | ユニット: センサー単体、MCU 単体 |
-| component | 6     | コンポーネント: ADC IC、モーター（プロジェクト固有） |
-| part      | 7     | 最終部品: 抵抗、ボルト等 |
+| Layer     | depth | Description |
+|-----------|-------|-------------|
+| mission   | 0     | Overall mission |
+| system    | 1     | A single spacecraft or ground station as a whole |
+| segment   | 2     | Major divisions such as space segment / ground segment |
+| subsystem | 3     | AOCS, EPS, TCS, ... |
+| assembly  | 4     | Assemblies: avionics boxes, valve stacks |
+| unit      | 5     | Units: individual sensors, a single MCU |
+| component | 6     | Components: an ADC IC, a motor (project-specific) |
+| part      | 7     | Terminal parts: resistors, bolts, ... |
 
-## 後方互換
-
-旧 3 階層 (`.system`, `.subsystem`, `.component`) を直接参照するコード
-（`VColumn.allLayersCovered`, `SubSystemSpec.safetyRecord` の `.layer`,
-Examples の `.layer := .system` 等）は、新版でも同じ constructor 名が
-そのまま使えるため **無変更でビルド通過** する。
-
-## `Ord` instance の変更点
-
-旧 instance は pattern match で `component < subsystem < system` の順序を
-与えていた（未使用だったが、記録のため）。新版は depth の自然順、すなわち
-`mission < system < ... < part` の順序になる。dead code 化していたため
-影響範囲はない。
+The `Ord` instance orders layers naturally by depth, so
+`mission < system < ... < part`, matching the usual ECSS hierarchy
+diagrams where higher levels appear with smaller indices.
 -/
 
 namespace VerifiedMBSE.VV
 
-/-- V-model design layer (ECSS-E-ST-10C の 7 階層 + プロジェクト固有 component)。 -/
+/-- V-model design layer: the seven ECSS-E-ST-10C layers plus a
+    project-specific `component` layer. -/
 inductive Layer where
   | mission
   | system
@@ -53,9 +45,10 @@ inductive Layer where
   | part
   deriving Repr, BEq, DecidableEq
 
-/-- 各層の深さ (0 = 最上位 mission、7 = 最下位 part)。
+/-- Depth of each layer (0 = topmost `mission`, 7 = bottom-most `part`).
 
-    `supports` 関係と `Ord` instance はこの depth を通して定義される。 -/
+    The `supports` relation and the `Ord` instance are both defined in
+    terms of this `depth`. -/
 def Layer.depth : Layer → Nat
   | .mission   => 0
   | .system    => 1
@@ -66,10 +59,11 @@ def Layer.depth : Layer → Nat
   | .component => 6
   | .part      => 7
 
-/-- Layer ordering via depth.
+/-- Layer ordering via `depth`.
 
-    `mission (0) < system (1) < ... < part (7)` の自然順。
-    ECSS の階層構造図とも一致する（上位を小さい数値で示す）。 -/
+    Produces the natural order `mission (0) < system (1) < ... < part (7)`,
+    in agreement with the usual ECSS hierarchy diagrams (upper layers
+    have smaller indices). -/
 instance : Ord Layer where
   compare a b := compare a.depth b.depth
 

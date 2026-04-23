@@ -39,8 +39,8 @@ def VMatrix.totalRecords (m : VMatrix) : Nat :=
 
 /-- Summary string for a VVRecord.
 
-    F5 で Layer が 8 階層に拡張されたため、全 constructor に対して 3 文字の
-    略語を割り当てる。ECSS-E-ST-10C 相当の表記を使う。 -/
+    Each of the eight `Layer` constructors is mapped to a
+    three-letter abbreviation following ECSS-E-ST-10C conventions. -/
 def VVRecord.summary (r : VVRecord) : String :=
   let layerStr := match r.layer with
     | .mission   => "MIS"

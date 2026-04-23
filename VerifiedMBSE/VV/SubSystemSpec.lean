@@ -5,33 +5,34 @@ import VerifiedMBSE.VV.Evidence
 /-!
 # SubSystemSpec: Parametric Subsystem Abstraction (Kripke-Generalized)
 
-`StructuralSpec`（構造）、`BehavioralSpec`（行動）、
-`FDIRBundle`（FDIR の証明束）、およびこれら3つを統合した
-`SubSystemSpec` を定義する。
+This module defines `StructuralSpec` (structure), `BehavioralSpec` (behavior),
+`FDIRBundle` (FDIR proof bundle), and the integrated `SubSystemSpec` that
+combines all three.
 
-## B-7: SubSystemSpec / BehavioralSpec の Kripke 一般化
+## Kripke generalization
 
-B-6 で `FDIRBundle` を `ToKripke α S D` ベースに統一したのに続き、B-7 で
-`BehavioralSpec` と `SubSystemSpec` も同様に `ToKripke α S D` ベースに
-一般化した。これにより以下が同一型の構造として扱える:
+`BehavioralSpec`, `FDIRBundle`, and `SubSystemSpec` are parameterized by a
+`ToKripke α S D` instance. This lets the same structures represent both
+single-machine and product-machine subsystems uniformly:
 
-- `SubSystemSpec sm` — 単一サブシステム仕様（`sm : StateMachine S D inv`）
-- `SubSystemSpec psm` — 合成サブシステム仕様（`psm : ProductStateMachine sm₁ sm₂`）
+- `SubSystemSpec sm` — single-subsystem specification (`sm : StateMachine S D inv`)
+- `SubSystemSpec psm` — composite-subsystem specification
+  (`psm : ProductStateMachine sm₁ sm₂`)
 
-合成（2機合成、ネストにより N 機）は `VV/ProductFDIR.lean` の
-`SubSystemSpec.compose` で提供する。
+Parallel composition (binary, nestable to N subsystems) is provided by
+`SubSystemSpec.compose` in `VV/ProductFDIR.lean`.
 
-### 破壊的変更 (A 案)
+## `BehavioralSpec.nonEmpty` instead of `.wellFormed`
 
-B-7 は **A 案** を採用している。旧 API:
+`BehavioralSpec x` carries only
+`nonEmpty : (ToKripke.toKripke x).NonEmpty` — the Kripke-level
+non-emptiness of the reachable state–data set. This is the weakest
+condition that supports the Kripke semantics uniformly across
+`StateMachine` and `ProductStateMachine`.
 
-```lean
-def epsBehavioral : BehavioralSpec EPSMode Nat epsGlobalInv :=
-  { sm := epsSM, wellFormed := epsSM_WellFormed }
-def epsSpec : SubSystemSpec EPSMode Nat epsGlobalInv := ...
-```
-
-新 API:
+For the `StateMachine` case the stronger `sm.WellFormed` implies
+`NonEmpty` via `StateMachine.WellFormed.nonEmpty`, so callers with a
+`WellFormed` proof in hand can always obtain a `BehavioralSpec`:
 
 ```lean
 def epsBehavioral : BehavioralSpec epsSM :=
@@ -39,10 +40,8 @@ def epsBehavioral : BehavioralSpec epsSM :=
 def epsSpec : SubSystemSpec epsSM := ...
 ```
 
-`BehavioralSpec` の `wellFormed : sm.WellFormed` フィールドは
-`nonEmpty : (toKripke x).NonEmpty` に変わる。`StateMachine.WellFormed.nonEmpty`
-で変換可能。合成時に必要な強い `WellFormed` は `SubSystemSpec.compose` に
-明示引数として渡す（`FDIRBundle.compose` と一貫）。
+Composition needs the full `WellFormed` strength; `SubSystemSpec.compose`
+takes it as an explicit argument, mirroring `FDIRBundle.compose`.
 -/
 
 namespace VerifiedMBSE.VV
@@ -54,24 +53,29 @@ open VerifiedMBSE.Behavior
 -- §1  StructuralSpec
 -- ============================================================
 
-/-- StructuralSpec: サブシステムの構造的側面。 -/
+/-- Structural aspect of a subsystem: parts, connectors, system, and a
+    well-formedness proof. -/
 structure StructuralSpec where
-  /-- サブシステム名 -/
+  /-- Subsystem name. -/
   name : String
-  /-- part 定義のリスト -/
+  /-- List of part definitions. -/
   parts : List PartDef
-  /-- connector のリスト -/
+  /-- List of connectors. -/
   connectors : List Connector
-  /-- System -/
+  /-- Underlying `System`. -/
   system : System
-  /-- system.parts との整合性 -/
+  /-- Consistency of `system.parts` with the top-level `parts` field. -/
   system_eq_parts : system.parts = parts
-  /-- system.connectors との整合性 -/
+  /-- Consistency of `system.connectors` with the top-level `connectors` field. -/
   system_eq_connectors : system.connectors = connectors
-  /-- 構造的 well-formedness -/
+  /-- Structural well-formedness of `system`. -/
   wellFormed : system.WellFormed
 
-/-- StructuralSpec のスマートコンストラクタ。 -/
+/-- Smart constructor for `StructuralSpec`.
+
+    Builds `system` internally from the supplied `parts` and `connectors`,
+    so the consistency fields (`system_eq_parts`, `system_eq_connectors`)
+    are discharged by `rfl`. -/
 def StructuralSpec.mk' (name : String)
     (parts : List PartDef)
     (connectors : List Connector)
@@ -85,7 +89,7 @@ def StructuralSpec.mk' (name : String)
     system_eq_connectors := rfl
     wellFormed := wf }
 
-/-- 全 part 不変条件が成立する命題。 -/
+/-- Proposition stating that every part invariant in `spec` holds. -/
 def StructuralSpec.allPartsInvariant (spec : StructuralSpec) : Prop :=
   ∀ p ∈ spec.parts, p.invariant
 
@@ -93,55 +97,59 @@ def StructuralSpec.allPartsInvariant (spec : StructuralSpec) : Prop :=
 -- §2  BehavioralSpec (Kripke-Generalized)
 -- ============================================================
 
-/-- BehavioralSpec: サブシステムの行動的側面（Kripke 一般化版）。
+/-- Behavioral aspect of a subsystem, generalized over any `ToKripke α S D`.
 
-    `ToKripke α S D` 型クラス経由で意味論が与えられるため、`x : α` として
-    `StateMachine S D inv` や `ProductStateMachine sm₁ sm₂` を渡せる。
+    The type-class parameter `[ToKripke α S D]` supplies the Kripke
+    semantics for `x : α`, so the same `BehavioralSpec` structure works
+    for `x : StateMachine S D inv` and `x : ProductStateMachine sm₁ sm₂`.
 
-    `nonEmpty` フィールドは Kripke 構造としての非空性（到達可能な
-    `(s, d)` が存在する）。`StateMachine sm` の場合は `sm.WellFormed` から
-    `StateMachine.WellFormed.nonEmpty` で変換可能。 -/
+    The only field is `nonEmpty`, expressing Kripke-level non-emptiness
+    (some reachable `(s, d)` exists). For `x : StateMachine _ _ inv`,
+    `StateMachine.WellFormed.nonEmpty` converts the stronger
+    `sm.WellFormed` into this field. -/
 structure BehavioralSpec
     {α : Type} {S D : Type} [ToKripke α S D]
     (x : α) where
-  /-- Kripke 構造としての非空性: 到達可能な `(s, d)` が存在する。 -/
+  /-- Kripke-level non-emptiness: some reachable `(s, d)` exists. -/
   nonEmpty : (ToKripke.toKripke x).NonEmpty
 
 -- ============================================================
--- §3  FDIRBundle (Unified via ToKripke, B-6)
+-- §3  FDIRBundle (Unified via ToKripke)
 -- ============================================================
 
-/-- FDIRBundle: FDIR 要件の証明束（統一版、B-6）。
+/-- Proof bundle for FDIR (Fault Detection, Isolation, and Recovery)
+    requirements, generalized over any `ToKripke α S D`.
 
-    `ToKripke α S D` 型クラス経由で意味論が与えられるため、`x : α` として
-    `StateMachine S D inv` や `ProductStateMachine sm₁ sm₂` を直接渡せる。
+    Parameterizing by `[ToKripke α S D]` lets the same structure carry
+    FDIR obligations for both single and composite subsystems:
 
-    - `FDIRBundle sm` (sm : StateMachine S D inv) — 単一サブシステムの FDIR
-    - `FDIRBundle psm` (psm : ProductStateMachine sm₁ sm₂) — 合成サブシステムの FDIR
+    - `FDIRBundle sm` where `sm : StateMachine S D inv` — single-subsystem FDIR
+    - `FDIRBundle psm` where `psm : ProductStateMachine sm₁ sm₂` — composite FDIR
 
-    合成された `FDIRBundle` の構築方法は `VV/ProductFDIR.lean` の
-    `FDIRBundle.compose` を参照。 -/
+    Construction of a composite `FDIRBundle` from two component bundles
+    is provided by `FDIRBundle.compose` in `VV/ProductFDIR.lean`. -/
 structure FDIRBundle
     {α : Type} {S D : Type} [ToKripke α S D]
     (x : α) where
-  /-- fault 状態の述語 -/
+  /-- Predicate characterizing fault states. -/
   isFault : S → Prop
-  /-- recovery 状態の述語 -/
+  /-- Predicate characterizing recovery states. -/
   isRecovery : S → Prop
-  /-- データの safety 条件 -/
+  /-- Safety predicate on data. -/
   isSafe : D → Prop
-  /-- R1: Safety □(isSafe d) -/
+  /-- R1 — Safety: `□ (isSafe d)`. -/
   safety : Always x (fun _ d => isSafe d)
-  /-- R2: Fault detection ◇(isFault s) -/
+  /-- R2 — Fault detection: `◇ (isFault s)`. -/
   detection : Eventually x (fun s _ => isFault s)
-  /-- R3: Fault recovery □(isFault → ◇ isRecovery) -/
+  /-- R3 — Fault recovery: `□ (isFault ⇒ ◇ isRecovery)`. -/
   recovery : Leads x (fun s _ => isFault s) (fun s _ => isRecovery s)
 
-/-- FDIRBundle から FDIRSpec への変換（StateMachine 特化）。
+/-- Convert an `FDIRBundle` to an `FDIRSpec` (StateMachine specialization).
 
-    `FDIRSpec` は現状 `StateMachine` 上にのみ定義されているため、この変換は
-    `StateMachine` 版の `FDIRBundle` に対してのみ意味を持つ。積状態機械上の
-    `FDIRBundle` は `.isFault` / `.safety` 等のフィールドを直接利用すればよい。 -/
+    `FDIRSpec` is currently defined only over `StateMachine`, so this
+    conversion is meaningful only when the bundle is over a
+    `StateMachine` value. For `FDIRBundle` over a product machine,
+    consume the fields (`.isFault`, `.safety`, etc.) directly. -/
 def FDIRBundle.toFDIRSpec
     {S D : Type} {inv : S → D → Prop}
     {sm : StateMachine S D inv}
@@ -155,60 +163,68 @@ def FDIRBundle.toFDIRSpec
 -- §4  SubSystemSpec (Kripke-Generalized)
 -- ============================================================
 
-/-- SubSystemSpec: 構造・行動・FDIR を統合したサブシステム仕様（Kripke 一般化版）。
+/-- A full subsystem specification integrating structure, behavior, and
+    FDIR, generalized over any `ToKripke α S D`.
 
-    `ToKripke α S D` 型クラスを通して、`StateMachine` 版と
-    `ProductStateMachine` 版を同一構造で扱える。合成は
-    `SubSystemSpec.compose` (VV/ProductFDIR.lean) で提供。
+    Because all three components (`StructuralSpec`, `BehavioralSpec x`,
+    `FDIRBundle x`) are uniform in `x : α`, the same `SubSystemSpec`
+    type covers `StateMachine` and `ProductStateMachine` instances.
+    Parallel composition is provided by `SubSystemSpec.compose` in
+    `VV/ProductFDIR.lean`.
 
-    新しいサブシステムの追加はこの型の 1 インスタンスの構成で完結する。 -/
+    Adding a new subsystem amounts to constructing one value of this
+    type. -/
 structure SubSystemSpec
     {α : Type} {S D : Type} [ToKripke α S D]
     (x : α) where
-  /-- 構造仕様 -/
+  /-- Structural specification. -/
   structural : StructuralSpec
-  /-- 行動仕様 -/
+  /-- Behavioral specification. -/
   behavioral : BehavioralSpec x
-  /-- FDIR 証明束 -/
+  /-- FDIR proof bundle. -/
   fdir : FDIRBundle x
 
-/-- サブシステム名。 -/
+/-- Subsystem name (drawn from the structural spec). -/
 def SubSystemSpec.name
     {α : Type} {S D : Type} [ToKripke α S D] {x : α}
     (spec : SubSystemSpec x) : String :=
   spec.structural.name
 
-/-- System を取得する。 -/
+/-- Underlying `System` (drawn from the structural spec). -/
 def SubSystemSpec.system
     {α : Type} {S D : Type} [ToKripke α S D] {x : α}
     (spec : SubSystemSpec x) : System :=
   spec.structural.system
 
-/-- StateMachine を取得する（StateMachine 特化）。
+/-- Retrieve the underlying `StateMachine` (StateMachine specialization).
 
-    一般化された `SubSystemSpec` では `x : α` なので、StateMachine を
-    取り出せるのは `x : StateMachine S D inv` のケースのみ。この版では
-    `x` 自身がそのまま StateMachine として返される。 -/
+    Because `SubSystemSpec` is parameterized over `x : α`, recovering a
+    `StateMachine` is meaningful only when `x : StateMachine S D inv`.
+    In that case `x` itself is the machine and is returned verbatim. -/
 def SubSystemSpec.stateMachine
     {S D : Type} {inv : S → D → Prop} {sm : StateMachine S D inv}
     (_spec : SubSystemSpec sm) : StateMachine S D inv :=
   sm
 
-/-- Consistent: 構造側 WellFormed かつ 行動側 NonEmpty。
+/-- Combined consistency: structural `System.WellFormed` and behavioral
+    Kripke `NonEmpty`.
 
-    旧 API の `spec.structural.system.WellFormed ∧ spec.behavioral.sm.WellFormed`
-    は、Kripke 一般化後は後者が `NonEmpty` に弱まる。StateMachine 版では
-    `StateMachine.WellFormed.nonEmpty` で従来の強い条件から導出可能。 -/
+    The behavioral side is `(ToKripke.toKripke x).NonEmpty` — the
+    weakest condition that uniformly covers `StateMachine` and
+    `ProductStateMachine`. For `StateMachine` instances this is
+    derivable from the full `sm.WellFormed` via
+    `StateMachine.WellFormed.nonEmpty`. -/
 def SubSystemSpec.Consistent
     {α : Type} {S D : Type} [ToKripke α S D] {x : α}
     (spec : SubSystemSpec x) : Prop :=
   spec.structural.system.WellFormed ∧ (ToKripke.toKripke x).NonEmpty
 
-/-- FDIRSpec の自動導出（StateMachine 特化）。
+/-- Automatic derivation of `FDIRSpec` (StateMachine specialization).
 
-    `FDIRSpec` は StateMachine 特化なので、`x : StateMachine S D inv` の
-    ケースのみ対応。一般化された `SubSystemSpec` の他のインスタンス化では
-    代わりに `spec.fdir.safety` 等の直接アクセスを使う。 -/
+    `FDIRSpec` is defined only for `StateMachine`, so this derivation
+    applies only to `x : StateMachine S D inv`. For other instances,
+    use the `spec.fdir` fields (`.safety`, `.detection`, `.recovery`)
+    directly. -/
 theorem SubSystemSpec.fdir_derivable
     {S D : Type} {inv : S → D → Prop} {sm : StateMachine S D inv}
     (spec : SubSystemSpec sm) :
@@ -221,20 +237,21 @@ theorem SubSystemSpec.fdir_derivable
 -- ============================================================
 
 /-
-record 生成関数は evidence-level を明示パラメータで受け取る（F1）。
+record 生成関数は evidence-level を明示パラメータで受け取る。
 デフォルトは `.trusted` を使うため、既存の呼び出しは変更不要で後方互換を保つ。
 `.contract`（仮定付き保証）や `.confidence`（確率的評価）を使いたい呼び出し側は、
 第 2 引数として明示的に `ValidationEvidence` を渡すことで三層評価が選択できる。
 
-B-7 で `SubSystemSpec` を Kripke 一般化したことに伴い、これらの生成関数も
-`x : α` ベースに一般化された。StateMachine 版も ProductStateMachine 版も
-同じ生成関数を使える。
+Kripke 一般化された `SubSystemSpec` に対応しており、`x : α` ベースで
+StateMachine 版も ProductStateMachine 版も同じ生成関数を使える。
 -/
 
-/-- サブシステムレベルの VVRecord（S1-WellFormed）。
+/-- Subsystem-level `VVRecord` for the S1-WellFormed property.
 
-    `ev` は対応する検証命題 `spec.structural.system.WellFormed` に対する
-    `ValidationEvidence`。デフォルトは `.trusted spec.structural.wellFormed`。 -/
+    `ev` is the `ValidationEvidence` attached to
+    `spec.structural.system.WellFormed`; it defaults to
+    `.trusted spec.structural.wellFormed`. Pass `.contract` or
+    `.confidence` explicitly to select a different evidence layer. -/
 def SubSystemSpec.subsystemRecord
     {α : Type} {S D : Type} [ToKripke α S D] {x : α}
     (spec : SubSystemSpec x)
@@ -247,10 +264,11 @@ def SubSystemSpec.subsystemRecord
     verified     := spec.structural.wellFormed
     validation   := ValidationTrace.init ev }
 
-/-- システムレベルの VVRecord（R1 Safety）。
+/-- System-level `VVRecord` for the R1-Safety property.
 
-    `ev` は `Always x (fun _ d => spec.fdir.isSafe d)` に対する
-    `ValidationEvidence`。デフォルトは `.trusted spec.fdir.safety`。 -/
+    `ev` is the `ValidationEvidence` attached to
+    `Always x (fun _ d => spec.fdir.isSafe d)`; it defaults to
+    `.trusted spec.fdir.safety`. -/
 def SubSystemSpec.safetyRecord
     {α : Type} {S D : Type} [ToKripke α S D] {x : α}
     (spec : SubSystemSpec x)
@@ -264,10 +282,10 @@ def SubSystemSpec.safetyRecord
     verified     := spec.fdir.safety
     validation   := ValidationTrace.init ev }
 
-/-- システムレベルの VVRecord（R3 Recovery）。
+/-- System-level `VVRecord` for the R3-Recovery property.
 
-    `ev` は `Leads` 命題に対する `ValidationEvidence`。
-    デフォルトは `.trusted spec.fdir.recovery`。 -/
+    `ev` is the `ValidationEvidence` attached to the `Leads` proposition;
+    it defaults to `.trusted spec.fdir.recovery`. -/
 def SubSystemSpec.recoveryRecord
     {α : Type} {S D : Type} [ToKripke α S D] {x : α}
     (spec : SubSystemSpec x)
@@ -289,7 +307,12 @@ def SubSystemSpec.recoveryRecord
 -- §6  Structural Composition
 -- ============================================================
 
-/-- 2 つのサブシステムを構造的に合成する。 -/
+/-- Parallel structural composition of two `StructuralSpec`s with an
+    optional list of inter-subsystem bridge connectors.
+
+    `bridge` carries connectors whose endpoints cross between `s1` and
+    `s2`; `hbridge` witnesses that each endpoint resides in the
+    concatenation of the two operand part lists. -/
 def StructuralSpec.compose
     (s1 s2 : StructuralSpec) (bridge : List Connector)
     (hbridge : ∀ c ∈ bridge,
@@ -305,7 +328,7 @@ def StructuralSpec.compose
     wellFormed := System.compose_WellFormed s1.system s2.system bridge
                     s1.wellFormed s2.wellFormed hbridge }
 
-/-- 合成後の part 数は各サブシステムの part 数の和に一致する。 -/
+/-- The composed part count equals the sum of the operand part counts. -/
 theorem StructuralSpec.compose_parts_length
     (s1 s2 : StructuralSpec) (bridge : List Connector)
     (hbridge : ∀ c ∈ bridge,

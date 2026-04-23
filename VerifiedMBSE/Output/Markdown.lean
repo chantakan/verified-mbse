@@ -45,10 +45,8 @@ private def padList (xs : List String) (n : Nat) : List String :=
 private def rightpad (s : String) (n : Nat) : String :=
   s ++ String.ofList (List.replicate (n - s.length) ' ')
 
-/-- Layer を Markdown 表ラベル (Title case) に変換する。
-
-    F5 で Layer が 8 階層に拡張されたため、全 constructor に対応する
-    ラベルを与える。 -/
+/-- Title-case label for each `Layer` constructor (used in Markdown
+    table row headers). -/
 private def layerTitleCase (l : Layer) : String :=
   match l with
   | .mission   => "Mission"
@@ -62,10 +60,10 @@ private def layerTitleCase (l : Layer) : String :=
 
 /-- Convert a VMatrix to a Markdown table string.
 
-    描画対象の Layer リストは従来通り `[.system, .subsystem, .component]` の
-    3 階層に絞っている（既存の衛星例は 3 階層しか埋めていないため）。将来
-    ECSS 準拠の 7 階層テーブルが必要になったら、この `layers` リストを
-    拡張するだけで対応可能。 -/
+    The rendered layers are fixed to the three-layer subset
+    `[.system, .subsystem, .component]`, which matches the structure
+    of the current satellite examples. Extending the table to all
+    seven ECSS layers only requires expanding this `layers` list. -/
 def VMatrix.toMarkdown (m : VMatrix) (title : String := "Satellite") : String :=
   let cols := m.columns
   let totalRecs := m.totalRecords

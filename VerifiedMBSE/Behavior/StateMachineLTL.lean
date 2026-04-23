@@ -5,13 +5,14 @@ import VerifiedMBSE.Behavior.Temporal
 /-!
 # StateMachine-specific LTL Operators
 
-`Next` (◯ P) と `Until` (P U Q) は具体的な遷移リスト (`sm.transitions`) に
-依存するため、`KripkeStructure` ではなく `StateMachine` 固有の演算子として
-ここに分離する。
+`Next` (◯ P) and `Until` (P U Q) depend on the explicit transition
+list `sm.transitions`, so they belong to `StateMachine` rather than
+`KripkeStructure` and are separated into this module.
 
-将来 `Next` / `Until` を `KripkeStructure` に持ち上げる場合は、
-「ステップ関係」`K.step : State → Data → State → Data → Prop` を
-`KripkeStructure` に追加する拡張を行う。現状は StateMachine のみで十分。
+Lifting `Next` / `Until` to `KripkeStructure` would require a
+per-step relation `K.step : State → Data → State → Data → Prop`
+that exposes enough structure for these operators. The `StateMachine`
+specialization covers present needs.
 -/
 
 namespace VerifiedMBSE.Behavior
@@ -20,8 +21,9 @@ namespace VerifiedMBSE.Behavior
 -- §1  Next (◯)
 -- ============================================================
 
-/-- Next (◯ P): 状態 `s`・データ `d` から一歩先の状態で `P` が成立する
-    遷移が存在する。遷移リストに依存するため StateMachine 固有。 -/
+/-- `Next (◯ P)`: from `(s, d)`, some transition leads to a successor
+    state at which `P` holds. Depends on `sm.transitions`, so this
+    operator is specific to `StateMachine`. -/
 def Next {S D : Type} {inv : S → D → Prop}
     (sm : StateMachine S D inv)
     (P : S → D → Prop) (s : S) (d : D) : Prop :=
@@ -32,11 +34,12 @@ def Next {S D : Type} {inv : S → D → Prop}
 -- §2  Until (P U Q)
 -- ============================================================
 
-/-- Until (P U Q): P が保持されている間に Q が成立する状態に到達する。
+/-- `Until P Q`: some state where `Q` holds is reached while `P`
+    holds throughout.
 
-    `now` ケース: 現在状態で既に Q が成立。
-    `later` ケース: P が成立する状態から、遷移を 1 歩進めた先でも Until が
-    継続する (帰納的定義)。 -/
+    `now` case: `Q` already holds at the current state.
+    `later` case: `P` holds at the current state, and `Until` continues
+    after advancing one transition (inductively). -/
 inductive Until {S D : Type} {inv : S → D → Prop}
     (sm : StateMachine S D inv)
     (P Q : S → D → Prop) : S → D → Prop where
@@ -50,10 +53,11 @@ inductive Until {S D : Type} {inv : S → D → Prop}
             Until sm P Q t.target (t.effect d) →
             Until sm P Q s d
 
-/-- Until P Q → Eventually Q (Reachable 証人が必要)。
+/-- `Until P Q` implies `Eventually Q`, given a reachability witness.
 
-    現状態が reachable であるという witness `hr` を使って、Until の帰納に
-    沿って到達可能性を伝搬させ、Q が成立する reachable state を構成する。 -/
+    The reachability witness `hr` of the starting state propagates
+    through the inductive structure of `Until`, yielding a reachable
+    state at which `Q` holds. -/
 theorem until_implies_eventually
     {S D : Type} {inv : S → D → Prop}
     {sm : StateMachine S D inv}

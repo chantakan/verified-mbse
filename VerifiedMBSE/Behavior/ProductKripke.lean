@@ -3,48 +3,55 @@ import VerifiedMBSE.Behavior.KripkeStructure
 /-!
 # ProductKripke: Heterogeneous Product of Kripke Structures
 
-任意の `[ToKripke α S₁ D₁]` と `[ToKripke β S₂ D₂]` に対して、2 つの Kripke 構造の
-インタリーブ積 `ProductKripke x y` を定義する。本ファイルは **StateMachine 非依存**
-で、純粋な Kripke 層の理論のみを扱う。
+Interleaving product `ProductKripke x y` of two Kripke structures for
+arbitrary `[ToKripke α S₁ D₁]` and `[ToKripke β S₂ D₂]`. This module is
+independent of `StateMachine` and develops the pure Kripke-level theory
+only.
 
-## B-8 の中核
+## Heterogeneous composition
 
-B-7 までは積状態機械 `ProductStateMachine sm₁ sm₂` が第 1/2 引数とも `StateMachine`
-特化であり、`ProductStateMachine psm₁₂ sm₃` のように `ProductKripke` を入れ子に
-することができなかった（3 機以上のネスト合成不可能）。
+`ProductKripke` accepts any two types carrying a `ToKripke` instance,
+so the following all use the same API:
 
-B-8 では `ProductKripke` 型自体を **任意の `ToKripke` インスタンス型を受け取る**
-ように一般化する。これにより:
+- `ProductKripke sm₁ sm₂ : Type` — two `StateMachine`s
+- `ProductKripke (pk : ProductKripke sm₁ sm₂) sm₃ : Type` — a 3-way
+  nested composition
+- `ProductKripke ct₁ ct₂` — two continuous-time systems (once
+  `ContinuousSystem` instances exist)
 
-- `ProductKripke sm₁ sm₂ : Type`（StateMachine 同士）
-- `ProductKripke (pk : ProductKripke sm₁ sm₂) sm₃ : Type`（3 機ネスト）
-- `ProductKripke ct₁ ct₂`（将来の連続時間系 ct_i : ContinuousSystem）
+The specialization `ProductStateMachine sm₁ sm₂` for two `StateMachine`
+operands is retained as an `abbrev` in `Behavior/Product.lean` and
+simply elaborates to `ProductKripke sm₁ sm₂`.
 
-が同じ API で書ける。旧 `ProductStateMachine sm₁ sm₂` は `ProductKripke sm₁ sm₂` の
-`abbrev` として `Behavior/Product.lean` で後方互換維持。
+## Design
 
-## 設計
+### `ProductKripke x y` is an empty structure
 
-### `ProductKripke x y` は空構造体
+The type itself acts as a marker encoding the agreement "take the
+product of `x` and `y`". Values carry no information and are built with
+`⟨⟩`. The structure is kept (rather than using `Unit`) as an extension
+point for future metadata such as synchronization tables or labels.
 
-型そのものが「x と y の積を考える」という合意を表現するマーカー。値は重要でなく
-`⟨⟩` で構築。将来メタデータ（同期遷移表、ラベル）追加の拡張点として構造体型を保持。
+### `ProductKripkeReachable` is interleaving
 
-### `ProductKripkeReachable` はインタリーブ積
+Each step advances exactly one side — either `x` or `y` — while the
+other side remains unchanged. Synchronous (both-sides-at-once) steps
+are not modeled.
 
-各ステップは `x` 側または `y` 側のいずれか一方の `step` を消費し、相手側は不変。
-同期遷移（両側同時）は扱わない。
+### Invariant preservation
 
-### `inv` の保存
+`ProductKripkeReachable` itself carries no invariant-preservation
+obligation. The safety result `inv_holds` is established in two stages:
 
-`ProductKripkeReachable` 自体は `inv` 保存条件を持たない。代わりに、以下の 2 段階:
+1. `fst_reachable` / `snd_reachable` project the product reachability
+   onto component-level reachability.
+2. Each component's `reachable_inv` field (an axiom of the
+   `KripkeStructure` record) combines with those projections to derive
+   `inv_holds` on the product.
 
-1. `fst_reachable` / `snd_reachable` で「積到達可能 → 各成分の到達可能」を示す
-2. 各成分の `reachable_inv`（`KripkeStructure` のフィールド公理）を組み合わせて
-   `inv_holds` を導く
-
-これにより、`step` に `inv` 保存を直接要求する必要がなく、`KripkeStructure` の
-定義が軽量に保たれる（`Transition.preserves` のような型レベル契約は要素側で持つ）。
+This keeps the `KripkeStructure` definition light: the `step` relation
+carries no built-in invariant obligation, and type-level contracts such
+as `Transition.preserves` are confined to the component layer.
 -/
 
 namespace VerifiedMBSE.Behavior
@@ -53,13 +60,17 @@ namespace VerifiedMBSE.Behavior
 -- §1  ProductKripke 型
 -- ============================================================
 
-/-- 任意の `[ToKripke α S₁ D₁]` と `[ToKripke β S₂ D₂]` に対する積マーカー型。
+/-- Marker type for the product of `x : α` and `y : β`, given
+    `[ToKripke α S₁ D₁]` and `[ToKripke β S₂ D₂]`.
 
-    空構造体。値は `⟨⟩` で構築。型レベルで「x と y の積を考える」という合意のみを
-    表現し、意味論は `ProductKripkeReachable` / `ProductKripke.toKripke` で与える。
+    An empty structure: values are built with `⟨⟩`. The type itself
+    encodes the agreement "consider the product of `x` and `y`"; the
+    Kripke semantics are supplied by `ProductKripkeReachable` and
+    `ProductKripke.toKripke`.
 
-    明示的な `mk ::` コンストラクタを宣言することで、フィールドなし構造体でも
-    Lean のパーサが次の宣言を正しく読めるようにする。 -/
+    The explicit `mk ::` declaration ensures the Lean parser reads the
+    following declaration correctly even though the structure has no
+    fields. -/
 structure ProductKripke
     {α β : Type} {S₁ D₁ S₂ D₂ : Type}
     [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
@@ -70,29 +81,31 @@ structure ProductKripke
 -- §2  ProductKripkeReachable (Interleaving Semantics)
 -- ============================================================
 
-/-- 積 Kripke 構造の到達可能性。**インタリーブ積**として定義する。
+/-- Reachability relation for the product Kripke structure, defined as
+    the **interleaving product**.
 
-    - `init`: 両側の Kripke 構造が到達可能な点 `(s₁, d₁)` / `(s₂, d₂)` から
-      スタート。旧 `ProductReachable.init` は StateMachine の初期状態に縛られていたが、
-      新版は任意の reachable 点から出発できるため、`fromLeft` / `fromRight` の
-      証明が induction 不要になる。
-    - `stepLeft` / `stepRight`: 左/右の `(toKripke x/y).step` を 1 ステップ進め、
-      相手側は不変。 -/
+    - `init`: starts from any pair of component-level reachable points
+      `(s₁, d₁)` / `(s₂, d₂)`. Because arbitrary reachable points are
+      admitted, subsequent lifting lemmas (`fromLeft`, `fromRight`) do
+      not require induction.
+    - `stepLeft` / `stepRight`: advances `(toKripke x).step` or
+      `(toKripke y).step` by one step while the other side remains
+      unchanged. -/
 inductive ProductKripkeReachable
     {α β : Type} {S₁ D₁ S₂ D₂ : Type}
     [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
     (x : α) (y : β) : S₁ × S₂ → D₁ × D₂ → Prop where
-  /-- 初期: 両 Kripke 構造の reachable 点からスタート. -/
+  /-- Initial case: start from reachable points of both Kripke structures. -/
   | init : ∀ {s₁ : S₁} {s₂ : S₂} {d₁ : D₁} {d₂ : D₂},
       (ToKripke.toKripke x).reachable s₁ d₁ →
       (ToKripke.toKripke y).reachable s₂ d₂ →
       ProductKripkeReachable x y (s₁, s₂) (d₁, d₂)
-  /-- 左側 step: x 側が 1 ステップ、y 側は不変. -/
+  /-- Left step: `x` advances by one step, `y` remains unchanged. -/
   | stepLeft : ∀ {s₁ : S₁} {s₂ : S₂} {d₁ : D₁} {d₂ : D₂} {s₁' : S₁} {d₁' : D₁},
       ProductKripkeReachable x y (s₁, s₂) (d₁, d₂) →
       (ToKripke.toKripke x).step s₁ d₁ s₁' d₁' →
       ProductKripkeReachable x y (s₁', s₂) (d₁', d₂)
-  /-- 右側 step: y 側が 1 ステップ、x 側は不変. -/
+  /-- Right step: `y` advances by one step, `x` remains unchanged. -/
   | stepRight : ∀ {s₁ : S₁} {s₂ : S₂} {d₁ : D₁} {d₂ : D₂} {s₂' : S₂} {d₂' : D₂},
       ProductKripkeReachable x y (s₁, s₂) (d₁, d₂) →
       (ToKripke.toKripke y).step s₂ d₂ s₂' d₂' →
@@ -102,10 +115,12 @@ inductive ProductKripkeReachable
 -- §3  Projection Lemmas (fst_reachable / snd_reachable)
 -- ============================================================
 
-/-- 射影: 積の到達可能性から左成分の到達可能性を取り出す。
+/-- Projection: product reachability implies left-component reachability.
 
-    `stepLeft` ケースでは要素側 `KripkeStructure` の `step_preserves_reachable`
-    公理を使い、`stepRight` ケースでは左成分が変化しないので IH をそのまま返す。 -/
+    The `stepLeft` case uses the component's
+    `step_preserves_reachable` axiom; the `stepRight` case leaves the
+    left component unchanged and returns the induction hypothesis
+    directly. -/
 theorem ProductKripkeReachable.fst_reachable
     {α β : Type} {S₁ D₁ S₂ D₂ : Type}
     [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
@@ -119,7 +134,7 @@ theorem ProductKripkeReachable.fst_reachable
       exact (ToKripke.toKripke x).step_preserves_reachable _ _ _ _ ih hstep
   | stepRight _hr₀ _hstep ih => exact ih
 
-/-- 射影: 積の到達可能性から右成分の到達可能性を取り出す。 -/
+/-- Projection: product reachability implies right-component reachability. -/
 theorem ProductKripkeReachable.snd_reachable
     {α β : Type} {S₁ D₁ S₂ D₂ : Type}
     [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
@@ -137,11 +152,12 @@ theorem ProductKripkeReachable.snd_reachable
 -- §4  Safety Theorem (inv_holds)
 -- ============================================================
 
-/-- 積の安全性定理: 積到達可能なら両成分の `inv` を満たす。
+/-- Product-level safety: a product-reachable state satisfies the
+    invariant of both components.
 
-    `fst_reachable` / `snd_reachable` で各成分の reachable を取り出し、
-    要素側 `KripkeStructure` の `reachable_inv` 公理を適用するだけ。
-    `ProductKripkeReachable` 自体の induction は不要。 -/
+    Extracts component reachability via `fst_reachable` / `snd_reachable`
+    and applies each component's `reachable_inv` axiom. No induction on
+    `ProductKripkeReachable` itself is required. -/
 theorem ProductKripkeReachable.inv_holds
     {α β : Type} {S₁ D₁ S₂ D₂ : Type}
     [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
@@ -156,11 +172,11 @@ theorem ProductKripkeReachable.inv_holds
 -- §5  step_preserves_reachable
 -- ============================================================
 
-/-- 積の step が到達可能性を保存する。
+/-- The product step preserves reachability.
 
-    `ProductKripke.toKripke` の `step_preserves_reachable` フィールドに渡す補題。
-    インタリーブの disjunction を分解し、各枝で `stepLeft` / `stepRight` コンストラクタを
-    適用する。 -/
+    Supplied to the `step_preserves_reachable` field of
+    `ProductKripke.toKripke`. Decomposes the interleaving disjunction
+    and applies `stepLeft` / `stepRight` in the respective branches. -/
 theorem ProductKripkeReachable.step_preserves_reachable
     {α β : Type} {S₁ D₁ S₂ D₂ : Type}
     [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
@@ -182,12 +198,12 @@ theorem ProductKripkeReachable.step_preserves_reachable
 -- §6  Lifting Lemmas (fromLeft / fromRight)
 -- ============================================================
 
-/-- 持ち上げ: 左側 Kripke 構造の reachable 点から、相手側の NonEmpty を補って
-    積の到達可能性を構成する。
+/-- Lifting: construct product reachability from a left-component
+    reachable point together with a `NonEmpty` witness on the right.
 
-    旧 `ProductReachable.fromLeft` は StateMachine の `WellFormed` を要求し
-    induction が必要だったが、新 `ProductKripkeReachable.init` が任意の reachable 点から
-    始められるため、`init` コンストラクタ一発で証明が済む。 -/
+    Because `ProductKripkeReachable.init` accepts arbitrary reachable
+    points on both sides, the `init` constructor discharges this
+    lemma directly — no induction required. -/
 theorem ProductKripkeReachable.fromLeft
     {α β : Type} {S₁ D₁ S₂ D₂ : Type}
     [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
@@ -199,8 +215,8 @@ theorem ProductKripkeReachable.fromLeft
   obtain ⟨s₂, d₂, hr₂⟩ := hne₂
   exact ⟨s₂, d₂, ProductKripkeReachable.init hr₁ hr₂⟩
 
-/-- 持ち上げ: 右側 Kripke 構造の reachable 点から、相手側の NonEmpty を補って
-    積の到達可能性を構成する。 -/
+/-- Lifting: construct product reachability from a right-component
+    reachable point together with a `NonEmpty` witness on the left. -/
 theorem ProductKripkeReachable.fromRight
     {α β : Type} {S₁ D₁ S₂ D₂ : Type}
     [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
@@ -216,17 +232,20 @@ theorem ProductKripkeReachable.fromRight
 -- §7  ProductKripke.toKripke
 -- ============================================================
 
-/-- `ProductKripke x y` を `KripkeStructure (S₁ × S₂) (D₁ × D₂)` として見る。
+/-- View `ProductKripke x y` as a `KripkeStructure (S₁ × S₂) (D₁ × D₂)`.
 
-    `abbrev` なので reducible で、以下の defeq 関係が成立する:
+    Defined as `abbrev` so elaboration is reducible and the following
+    definitional equalities hold:
+
     - `(pk.toKripke).inv p d = (toKripke x).inv p.1 d.1 ∧ (toKripke y).inv p.2 d.2`
     - `(pk.toKripke).reachable p d = ProductKripkeReachable x y p d`
-    - `(pk.toKripke).step` = インタリーブ disjunction
+    - `(pk.toKripke).step = ` the interleaving disjunction
 
     ### `reachable_inv` / `step_preserves_reachable`
 
-    §4 / §5 で証明した `ProductKripkeReachable.inv_holds` /
-    `ProductKripkeReachable.step_preserves_reachable` をそのまま代入する。 -/
+    Supplied by the lemmas from §4 and §5
+    (`ProductKripkeReachable.inv_holds` and
+    `ProductKripkeReachable.step_preserves_reachable`). -/
 abbrev ProductKripke.toKripke
     {α β : Type} {S₁ D₁ S₂ D₂ : Type}
     [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
@@ -246,12 +265,13 @@ abbrev ProductKripke.toKripke
 -- §8  ToKripke instance
 -- ============================================================
 
-/-- `ProductKripke x y` に対する `ToKripke` instance。
+/-- `ToKripke` instance for `ProductKripke x y`.
 
-    これにより `Always pk P` / `Eventually pk P` / `Leads pk P Q` が
-    `StateMachine` / `ProductStateMachine` と同一 API で書ける。
-    3 機以上のネスト合成 (`ProductKripke (pk : ProductKripke ...) sm₃`) も、
-    この instance が再帰的に resolve されて機能する。 -/
+    Makes `Always pk P`, `Eventually pk P`, and `Leads pk P Q`
+    available for products with the same API used for `StateMachine`
+    and `ProductStateMachine`. Nested compositions of three or more
+    operands (e.g. `ProductKripke (pk : ProductKripke ...) sm₃`) work
+    because instance resolution recurses through this declaration. -/
 instance instToKripkeProductKripke
     {α β : Type} {S₁ D₁ S₂ D₂ : Type}
     [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
@@ -263,10 +283,11 @@ instance instToKripkeProductKripke
 -- §9  ProductKripke.nonEmpty
 -- ============================================================
 
-/-- 両側の NonEmpty から、積の NonEmpty を導く。
+/-- `NonEmpty` on both sides implies `NonEmpty` on the product.
 
-    `init` コンストラクタで両側の reachable 点から積到達可能状態を構築できるため、
-    induction 不要の自明な証明。 -/
+    The `init` constructor assembles a product-reachable state from the
+    two component reachable points, so the proof is immediate and
+    requires no induction. -/
 theorem ProductKripke.nonEmpty
     {α β : Type} {S₁ D₁ S₂ D₂ : Type}
     [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]

@@ -6,11 +6,10 @@ import VerifiedMBSE.VV.SubSystemSpec
 Defines `mkComponentRecord` and `SubSystemVVBundle`, which batch-construct
 `VVRecord`s from a `SubSystemSpec`.
 
-## B-7: Kripke 一般化
-
-`SubSystemSpec` の Kripke 一般化に伴い、`SubSystemVVBundle` もその型引数を
-`x : α` ベースに一般化した。StateMachine 版も ProductStateMachine 版も同じ
-`SubSystemVVBundle` 型で扱える。
+Because `SubSystemSpec` is parameterized over
+`[ToKripke α S D] {x : α}`, `SubSystemVVBundle` inherits the same
+parameterization and covers both `StateMachine` and
+`ProductStateMachine` cases through one uniform type.
 -/
 
 namespace VerifiedMBSE.VV
@@ -40,11 +39,13 @@ def mkComponentRecord
 -- §2  SubSystemVVBundle (Kripke-Generalized)
 -- ============================================================
 
-/-- SubSystemVVBundle: bundle of VVRecords constructed from a SubSystemSpec.
+/-- SubSystemVVBundle: bundle of VVRecords constructed from a
+    `SubSystemSpec`.
 
-    B-7 で `SubSystemSpec` が Kripke 一般化されたため、本構造の implicit
-    型引数も `{α : Type} {S D : Type} [ToKripke α S D] {x : α}` に変更された。
-    StateMachine 版・ProductStateMachine 版の両方に対応する。 -/
+    The implicit parameters `{α : Type} {S D : Type} [ToKripke α S D]
+    {x : α}` mirror those of `SubSystemSpec`, so the bundle applies
+    uniformly to both `StateMachine`-based and `ProductStateMachine`-based
+    subsystem specifications. -/
 structure SubSystemVVBundle
     {α : Type} {S D : Type} [ToKripke α S D]
     {x : α} (spec : SubSystemSpec x) where

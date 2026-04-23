@@ -1,15 +1,17 @@
 import VerifiedMBSE.VV.ProductFDIR
 
 /-!
-# Variadic Composition API (B-8d)
+# Variadic Composition API
 
-N 機の `SubSystemSpec` を `List` から一気に合成する API。B-8c の 2 項
-`SubSystemSpec.compose` を繰り返し呼ぶ書き方を、`List.foldl` ベースで
-簡潔化する。
+Compose N `SubSystemSpec`s held in a `List` with a single call. This module
+wraps the binary `SubSystemSpec.compose` with `List.foldl` so that N-ary
+composition can be written concisely.
 
-## モチベーション
+## Motivation
 
-B-8c までの N 機合成は以下のように 2 項 `compose` のネストで書く必要があった:
+Nested binary `SubSystemSpec.compose` calls are verbose. Each step requires
+constructing a `ProductKripke` marker, supplying `NonEmpty` proofs for both
+operands, and providing an empty-`bridge` `hbridge` proof:
 
 ```lean
 let s₁₂   := SubSystemSpec.compose s₁ s₂ pk₁₂ hne₁ hne₂ [] (by ...)
@@ -17,85 +19,84 @@ let s₁₂₃  := SubSystemSpec.compose s₁₂ s₃ pk₁₂₃ s₁₂.behavi
 let s₁₂₃₄ := SubSystemSpec.compose s₁₂₃ s₄ pk... s₁₂₃.behavioral.nonEmpty hne₄ [] (by ...)
 ```
 
-機数が増えるごとに `ProductKripke` マーカー構築・`NonEmpty` 引数・
-空 bridge の `hbridge` 証明が定型的に重複する。しかも各ステップで
-生成される中間 `spec` の型 `SubSystemSpec (ProductKripke ... )` が
-次のステップで第 1 引数として使われるため、異種型を扱えないと
-`List` ベースの API が組めない。
+More fundamentally, each step produces an intermediate
+`SubSystemSpec (ProductKripke ...)` whose type differs from the next
+operand, so heterogeneous values cannot be held uniformly in a `List`.
 
-B-8d では以下を導入してこれを解決する:
+This module resolves both issues with:
 
-- `SubSystemPayload`: 匿名的に `α / S / D / ToKripke instance / x / spec` を
-  パッケージ化した「合成可能な荷物」。これにより異種 `SubSystemSpec` が
-  `List SubSystemPayload` として統一的に扱える。
-- `SubSystemPayload.compose`: 2 機分の payload を合成。`NonEmpty` は
-  各 `spec.behavioral.nonEmpty` から自動供給され、`bridge = []` で
-  固定される。
-- `SubSystemPayload.composeMany`: `List SubSystemPayload` を `foldl` で
-  左結合的に合成。空リストは `none`、単機は `some p`、2 機以上は
-  `some ((((p₀ ∘ p₁) ∘ p₂) ∘ ...) ∘ pₙ)`。
+- `SubSystemPayload`: an anonymous package bundling
+  `α / S / D / ToKripke instance / x / spec` into a single type, so that
+  heterogeneous `SubSystemSpec` values are uniformly held as
+  `List SubSystemPayload`.
+- `SubSystemPayload.compose`: binary composition of two payloads.
+  `NonEmpty` is supplied automatically from each `spec.behavioral.nonEmpty`,
+  and `bridge` is fixed to `[]`.
+- `SubSystemPayload.composeWithBridge`: binary composition accepting
+  inter-subsystem connectors (e.g. communication links, shared power
+  buses) as `bridge : List Connector` with an `hbridge` proof of
+  part-reference integrity.
+- `SubSystemPayload.composeMany`: left-associative `List.foldl` over a
+  `List SubSystemPayload`. The empty list yields `none`, a singleton
+  yields `some p`, and `n ≥ 2` elements yield
+  `some ((((p₀ ∘ p₁) ∘ p₂) ∘ ...) ∘ pₙ)`.
+- Equivalence lemma `compose_eq_composeWithBridge_nil`: the bridge-free
+  `compose` is definitionally equal to `composeWithBridge [] _`.
 
-B-8e で以下を追加した:
+**A bridge-enabled variadic API is intentionally not provided.** The
+per-step `hbridge` proposition depends on the cumulative parts produced
+by previous folding steps, so a precomputed data structure such as
+`List (SubSystemPayload × List Connector × Proof)` cannot express it.
+In practice, call `composeWithBridge` at the steps that need a bridge
+and bundle the remaining steps with `composeMany`.
 
-- `SubSystemPayload.composeWithBridge`: 2 機合成の bridge 付きバージョン。
-  機間コネクタ (通信リンク、電力共有ラインなど) を `bridge : List Connector`
-  として受け取り、`hbridge` で parts 参照整合性を保証する。
-- 等価補題 `compose_eq_composeWithBridge_nil`: bridge 無し版 `compose` は
-  `composeWithBridge [] _` と defeq。
+## Design decisions
 
-**可変長 + bridge の List 版は意図的に提供していない**: 段ごとの bridge の
-`hbridge` 命題は前段までの累積 parts に依存するため、
-`List (SubSystemPayload × List Connector × Proof)` のような事前構築済み
-データ構造では表現不能。実用上は `composeWithBridge` を必要な段で呼び、
-残りを `composeMany` で束ねる二段アプローチを推奨する。
+### Left-associative fold
 
-## 設計判断
+`List.foldl` matches the associativity of the existing 3-subsystem
+example `(EPS × Mini) × Mini2` in `Examples/Spacecraft/Integration.lean`.
+The intermediate state type grows as `((S₁ × S₂) × S₃) × S₄`, so
+projections such as `.1.1.1` align with existing patterns.
 
-### 左結合 (`foldl`) を採用
+### `bridge = []` in the variadic API
 
-既存の `Examples/Spacecraft/Integration.lean` の 3 機合成
-`(EPS × Mini) × Mini2` と同じ結合方向にする。型の形が
-`((S₁ × S₂) × S₃) × S₄` と段階的に伸びるため、射影 `.1.1.1` 等が
-既存のパターンと揃う。
+Binary `SubSystemSpec.compose` accepts a `bridge : List Connector`, but
+expressing "at which step a bridge is inserted" in a variadic API is
+awkward. `composeMany` fixes `bridge = []` at every step; call sites
+that need inter-subsystem connectors invoke `composeWithBridge`
+explicitly at the relevant steps.
 
-### `bridge = []` に限定
+### Associativity is unproven
 
-2 項 `SubSystemSpec.compose` は `bridge : List Connector` を受け取れるが、
-N 機合成で「どの段に bridge を挟むか」を表現する API は煩雑になるため
-初版では全段 `bridge = []` に固定する。機間コネクタが必要な呼び出しは
-引き続き 2 項 `compose` を明示的に使う。将来 B-8e で
-`composeManyWithBridges : List (SubSystemPayload × List Connector) → ...`
-を拡張する余地を残す。
-
-### 結合律は未証明 (意図的)
-
-`(p₁ ∘ p₂) ∘ p₃` と `p₁ ∘ (p₂ ∘ p₃)` は状態型が
-`((S₁ × S₂) × S₃)` vs `(S₁ × (S₂ × S₃))` で一致しないため、
-厳密な `=` では示せない。意味論的等価性 (state 射影が双射) は
-`Equivalence.ComponentEquiv` 経由で別途示す必要があり、本ファイルでは
-スコープ外とする。`foldl` / `foldr` の意味論的等価性も同じ理由で
-今回は扱わない。
+`(p₁ ∘ p₂) ∘ p₃` and `p₁ ∘ (p₂ ∘ p₃)` have distinct state types
+(`((S₁ × S₂) × S₃)` vs `(S₁ × (S₂ × S₃))`), so strict equality does
+not hold. Semantic equivalence (state projections form a bijection)
+must be established via `Equivalence.ComponentEquiv` and is out of
+scope for this module. Equivalence of `foldl` and `foldr` is deferred
+for the same reason.
 
 ### `SubSystemPayload : Type 1`
 
-`α : Type` フィールドを持つため universe bump する。`List` は universe
-polymorphic なので `List SubSystemPayload : Type 1` として問題なく
-扱える。実用上は呼び出し側で型を明示する必要はない。
+The `α : Type` field forces a universe bump. Because `List` is universe
+polymorphic, `List SubSystemPayload : Type 1` composes without friction
+and call sites need no explicit type annotations.
 
-### `instToKripkeOfPayload` を global instance 化
+### `instToKripkeOfPayload` as a global instance
 
-`SubSystemPayload` の `toKripkeInst` フィールドは通常の field なので、
-instance resolution の探索対象にならない。`p.spec.name` のような
-projection は `SubSystemSpec.name` が要求する `[ToKripke α S D]` を
-解決できずに失敗する。これを解決するため、`p : SubSystemPayload` から
-`ToKripke p.α p.S p.D` を自動供給する global instance を登録する。
+The `toKripkeInst` field is an ordinary field, which is not eligible for
+instance resolution. Without the global instance, projections such as
+`p.spec.name` fail to elaborate because `SubSystemSpec.name` requires
+`[ToKripke α S D]`. The global instance exposes `p.toKripkeInst` as an
+inferable `ToKripke p.α p.S p.D`, making every `p.spec.*` projection
+resolve correctly.
 
-### `SubSystemPayload.ofSpec` は `abbrev`
+### `SubSystemPayload.ofSpec` as an `abbrev`
 
-`(SubSystemPayload.ofSpec spec).α` 等の field projection が自動的に
-reduction されて `rfl` でサニティテストが通るよう、`def` ではなく
-`abbrev` で定義する。`compose` 側は proof-relevant な中身を持つため
-通常の `def` を維持する。
+Defining `ofSpec` as `abbrev` lets field projections of the form
+`(SubSystemPayload.ofSpec spec).α` reduce automatically, so sanity
+tests close by `rfl`. The composition operators carry proof-relevant
+content and remain plain `def`.
 
 -/
 
@@ -108,64 +109,66 @@ open VerifiedMBSE.Behavior
 -- §1  SubSystemPayload
 -- ============================================================
 
-/-- 匿名的に合成可能な 1 機分のペイロード。
+/-- Anonymous composable payload for a single subsystem.
 
-    `α / S / D / ToKripke instance / x / spec` を 1 つの構造体に
-    パッケージ化することで、異種 `SubSystemSpec x` を `List` で
-    統一的に扱える。
+    Bundles `α / S / D / ToKripke instance / x / spec` into a single
+    structure so that heterogeneous `SubSystemSpec x` values can be held
+    uniformly in a `List`.
 
-    ### フィールド
+    ### Fields
 
-    - `α`: 行動モデルの型 (例: `StateMachine EPSMode Nat epsGlobalInv` や
-      `ProductKripke sm₁ sm₂`)
-    - `S`, `D`: 状態型・データ型
-    - `toKripkeInst`: `α` を Kripke 構造として解釈する instance
-    - `x`: `α` の具体値
-    - `spec`: `x` 上の `SubSystemSpec`
+    - `α`: the behavioral model type (e.g. `StateMachine EPSMode Nat epsGlobalInv`
+      or `ProductKripke sm₁ sm₂`)
+    - `S`, `D`: state and data types
+    - `toKripkeInst`: instance interpreting `α` as a Kripke structure
+    - `x`: the concrete behavioral model value
+    - `spec`: the `SubSystemSpec` over `x`
 
-    ### universe 問題
+    ### Universe
 
-    `α : Type` を持つため `SubSystemPayload : Type 1`。`List` は universe
-    polymorphic で `List SubSystemPayload : Type 1` となるが、
-    エンドユーザは型明示不要。 -/
+    The `α : Type` field forces `SubSystemPayload : Type 1`. Since `List`
+    is universe polymorphic, `List SubSystemPayload : Type 1` works
+    without friction, and call sites need no explicit type annotations. -/
 structure SubSystemPayload : Type 1 where
-  /-- 行動モデルの型。 -/
+  /-- The behavioral model type. -/
   α : Type
-  /-- 状態型。 -/
+  /-- State type. -/
   S : Type
-  /-- データ型。 -/
+  /-- Data type. -/
   D : Type
-  /-- `α` を Kripke 構造として解釈する instance。 -/
+  /-- Instance interpreting `α` as a Kripke structure. -/
   toKripkeInst : ToKripke α S D
-  /-- 行動モデルの具体値 (StateMachine、ProductKripke 等)。 -/
+  /-- Concrete behavioral model value (e.g. `StateMachine`, `ProductKripke`). -/
   x : α
-  /-- `x` 上のサブシステム仕様。 -/
+  /-- Subsystem specification over `x`. -/
   spec : @SubSystemSpec α S D toKripkeInst x
 
-/-- `SubSystemPayload` の `toKripkeInst` フィールドを global instance として
-    自動供給する。
+/-- Exposes the `toKripkeInst` field of a `SubSystemPayload` as a global
+    instance.
 
-    これがないと `p.spec.name` や `p.spec.structural` 等の projection で
-    `SubSystemSpec.name` / `SubSystemSpec.structural` が要求する
-    `[ToKripke α S D]` が解決できない（構造体の通常 field は instance
-    resolution の探索対象にならないため）。
+    Without this instance, projections such as `p.spec.name` or
+    `p.spec.structural` fail to elaborate because `SubSystemSpec.name`
+    and `SubSystemSpec.structural` require `[ToKripke α S D]`, and
+    ordinary structure fields are not visible to instance resolution.
 
-    このグローバル instance により、以下がすべて型解決可能になる:
+    With this global instance, the following all resolve:
     - `p.spec.name`, `p.spec.structural`, `p.spec.behavioral`, `p.spec.fdir`
     - `p.spec.safetyRecord`, `p.spec.subsystemRecord`, `p.spec.recoveryRecord`
-    - `(ToKripke.toKripke p.x).NonEmpty` 等の Kripke 層 API -/
+    - Kripke-layer API such as `(ToKripke.toKripke p.x).NonEmpty` -/
 instance instToKripkeOfPayload (p : SubSystemPayload) :
     ToKripke p.α p.S p.D :=
   p.toKripkeInst
 
-/-- `SubSystemSpec x` から `SubSystemPayload` を構築する簡便コンストラクタ。
+/-- Convenience constructor building a `SubSystemPayload` from a
+    `SubSystemSpec x`.
 
-    型引数と instance は `[ToKripke α S D]` 経由で自動的に推論されるため、
-    呼び出し側は `SubSystemPayload.ofSpec epsSpec` のように書ける。
+    Type arguments and the `ToKripke` instance are inferred via
+    `[ToKripke α S D]`, so call sites can write
+    `SubSystemPayload.ofSpec epsSpec`.
 
-    `abbrev` として定義することで、`(SubSystemPayload.ofSpec spec).α` 等の
-    field projection が自動 reduction され、`rfl` でサニティテストが
-    通るようにしている。 -/
+    Defined as `abbrev` so that field projections such as
+    `(SubSystemPayload.ofSpec spec).α` reduce automatically, letting
+    sanity tests close by `rfl`. -/
 abbrev SubSystemPayload.ofSpec
     {α : Type} {S D : Type} [inst : ToKripke α S D] {x : α}
     (spec : SubSystemSpec x) : SubSystemPayload :=
@@ -177,23 +180,25 @@ abbrev SubSystemPayload.ofSpec
 -- §2  2 機合成
 -- ============================================================
 
-/-- 2 つのペイロードを並列合成する。bridge なし (`[]`) 版。
+/-- Compose two payloads in parallel (bridge-free).
 
-    - `ProductKripke p₁.x p₂.x` マーカーを内部で構築
-    - `NonEmpty` 証明は各 `spec.behavioral.nonEmpty` から自動供給
-    - bridge は `[]` に固定 (機間コネクタが必要な場合は B-8e で追加された
-      `composeWithBridge` を使う)
+    - Builds the `ProductKripke p₁.x p₂.x` marker internally.
+    - Supplies `NonEmpty` proofs from each `spec.behavioral.nonEmpty`
+      automatically.
+    - Fixes `bridge` to `[]`; for inter-subsystem connectors, use
+      `composeWithBridge`.
 
-    戻り値の payload は:
+    The resulting payload satisfies:
     - `α = ProductKripke p₁.x p₂.x`
     - `S = p₁.S × p₂.S`
     - `D = p₁.D × p₂.D`
     - `toKripkeInst = instToKripkeProductKripke`
-    - `x = ⟨⟩` (空構造体)
-    - `spec = SubSystemSpec.compose p₁.spec p₂.spec ...` の結果
+    - `x = ⟨⟩` (empty marker)
+    - `spec = SubSystemSpec.compose p₁.spec p₂.spec ...`
 
-    `letI` で `p₁.toKripkeInst` / `p₂.toKripkeInst` を local instance として
-    導入し、`ProductKripke p₁.x p₂.x` の型チェックと instance 解決を通す。 -/
+    Uses `letI` to expose `p₁.toKripkeInst` and `p₂.toKripkeInst` as
+    local instances so that `ProductKripke p₁.x p₂.x` type-checks and
+    its instance resolution succeeds. -/
 def SubSystemPayload.compose (p₁ p₂ : SubSystemPayload) : SubSystemPayload :=
   letI := p₁.toKripkeInst
   letI := p₂.toKripkeInst
@@ -210,20 +215,21 @@ def SubSystemPayload.compose (p₁ p₂ : SubSystemPayload) : SubSystemPayload :
         [] (by intros; contradiction) }
 
 -- ============================================================
--- §2.5  Bridged 2-ary composition (B-8e)
+-- §2.5  Bridged 2-ary composition
 -- ============================================================
 
-/-- 2 つのペイロードを bridge connector 付きで並列合成する。
+/-- Compose two payloads in parallel with inter-subsystem bridge connectors.
 
-    B-8d の `compose` が `bridge = []` に固定していたのを拡張し、機間コネクタ
-    (例: 機間通信リンク、電力共有ライン) を `bridge : List Connector` で
-    受け取れるようにしたもの。
+    Accepts inter-subsystem connectors (e.g. communication links, shared
+    power buses) as `bridge : List Connector`, extending the bridge-free
+    `compose`.
 
-    ### `hbridge` 制約
+    ### `hbridge` constraint
 
-    bridge の各 connector は `p₁` と `p₂` の `.system.parts` のどちらかに
-    source/target が属する必要がある。これは 2 項 `SubSystemSpec.compose` の
-    `hbridge` をそのまま payload レベルに持ち上げたもの。
+    Each connector in `bridge` must have its `source.part` and
+    `target.part` located in the concatenated parts of `p₁` and `p₂`.
+    This is the payload-level lift of the `hbridge` obligation of the
+    binary `SubSystemSpec.compose`:
 
     ```
     ∀ c ∈ bridge,
@@ -233,23 +239,24 @@ def SubSystemPayload.compose (p₁ p₂ : SubSystemPayload) : SubSystemPayload :
                       ++ p₂.spec.structural.system.parts
     ```
 
-    呼び出し側は各 bridge に対してこの属性を proof として渡す。
+    Call sites supply this proof per invocation.
 
-    ### 実装
+    ### Implementation
 
-    `compose` と同じく `letI` で local instance を導入し、`ProductKripke` を
-    構築して `SubSystemSpec.compose` を `bridge`/`hbridge` 付きで呼ぶ。
-    `bridge = []` かつ `hbridge = by intros; contradiction` を渡すと、
-    `compose p₁ p₂` と同じ結果になる（下記 `compose_eq_composeWithBridge_nil`
-    参照）。
+    Uses `letI` to expose local `ToKripke` instances, builds the
+    `ProductKripke` marker, and invokes `SubSystemSpec.compose` with
+    the given `bridge` / `hbridge`. Passing `bridge = []` and
+    `hbridge = by intros; contradiction` produces the same result as
+    `compose p₁ p₂`; see `compose_eq_composeWithBridge_nil`.
 
-    ### 可変長との関係
+    ### Relation to the variadic API
 
-    可変長 API (`composeMany`) の bridge 付き版は **意図的に提供しない**。
-    段ごとの bridge の `hbridge` 命題は前段までの累積 parts に依存するため、
-    `List (SubSystemPayload × List Connector × Proof)` のような事前構築済み
-    データ構造で表現できない。実用上は本 `composeWithBridge` を必要な段で
-    呼び、残りを `composeMany` で束ねる二段アプローチを推奨する。 -/
+    A bridge-enabled variadic form is **intentionally not provided**.
+    The per-step `hbridge` proposition depends on the cumulative parts
+    produced by previous folding steps, so a precomputed data structure
+    such as `List (SubSystemPayload × List Connector × Proof)` cannot
+    express it. In practice, call `composeWithBridge` at the steps that
+    need a bridge and bundle the remaining steps with `composeMany`. -/
 def SubSystemPayload.composeWithBridge
     (p₁ p₂ : SubSystemPayload)
     (bridge : List Connector)
@@ -273,12 +280,12 @@ def SubSystemPayload.composeWithBridge
         p₂.spec.behavioral.nonEmpty
         bridge hbridge }
 
-/-- `compose p₁ p₂` は `composeWithBridge p₁ p₂ [] _` と defeq で等しい。
+/-- `compose p₁ p₂` and `composeWithBridge p₁ p₂ [] _` are definitionally
+    equal.
 
-    bridge 引数を `[]` に固定した `composeWithBridge` は、B-8d の素朴な
-    `compose` と完全に一致する。これにより「bridge なし」経路と
-    「bridge あり（空 bridge）」経路の等価性が型レベルで保証され、
-    既存 API との後方互換性が明示される。 -/
+    Specializing `composeWithBridge` to an empty `bridge` recovers the
+    bridge-free `compose`. The equivalence between the "no bridge" and
+    "empty bridge" paths is therefore visible at the type level. -/
 theorem SubSystemPayload.compose_eq_composeWithBridge_nil
     (p₁ p₂ : SubSystemPayload) :
     p₁.compose p₂ =
@@ -288,15 +295,15 @@ theorem SubSystemPayload.compose_eq_composeWithBridge_nil
 -- §3  可変長合成
 -- ============================================================
 
-/-- N 機ペイロードを左結合で合成する。
+/-- Left-associative variadic composition of N payloads.
 
-    - `[]` → `none` (合成対象なし)
-    - `[p]` → `some p` (単機はそのまま)
+    - `[]` → `none` (nothing to compose)
+    - `[p]` → `some p` (a single payload passes through)
     - `p₀ :: p₁ :: ... :: pₙ` → `some ((((p₀ ∘ p₁) ∘ p₂) ∘ ...) ∘ pₙ)`
 
-    `List.foldl` で左結合: 既存の 3 機合成 `(EPS × Mini) × Mini2` と同じ
-    結合方向となり、状態型は `(((S₀ × S₁) × S₂) × ... ) × Sₙ` の形で
-    段階的に伸びる。 -/
+    Implemented via `List.foldl`. The left-associative result matches
+    the 3-subsystem example `(EPS × Mini) × Mini2`, so the state type
+    grows incrementally as `(((S₀ × S₁) × S₂) × ...) × Sₙ`. -/
 def SubSystemPayload.composeMany :
     List SubSystemPayload → Option SubSystemPayload
   | []      => none
@@ -306,15 +313,18 @@ def SubSystemPayload.composeMany :
 -- §4  補助補題
 -- ============================================================
 
-/-- 合成後の総 part 数は両ペイロードの `.system.parts` 数の和に一致する。
+/-- The total part count of a composed payload equals the sum of the
+    `.system.parts` counts of the two operands.
 
-    `StructuralSpec.compose_parts_length` を payload レベルに持ち上げた
-    補助補題。`bridge` は常に `[]` なので part 数に影響しない。
+    Payload-level lift of `StructuralSpec.compose_parts_length`. Since
+    `bridge = []` here, the part count is unaffected.
 
-    右辺が `.system.parts.length` なのは既存 `StructuralSpec.compose_parts_length`
-    と整合させるため。smart constructor で作られた `StructuralSpec` では
-    `.parts = .system.parts` が defeq で成立するため、具体インスタンスに対しては
-    `.structural.parts.length` と `.structural.system.parts.length` が一致する。 -/
+    The right-hand side uses `.system.parts.length` (rather than
+    `.parts.length`) to stay consistent with
+    `StructuralSpec.compose_parts_length`. For `StructuralSpec` values
+    built by the smart constructor, `.parts = .system.parts` holds
+    definitionally, so concrete instances satisfy
+    `.structural.parts.length = .structural.system.parts.length`. -/
 theorem SubSystemPayload.compose_parts_length
     (p₁ p₂ : SubSystemPayload) :
     (p₁.compose p₂).spec.structural.parts.length =
@@ -323,20 +333,20 @@ theorem SubSystemPayload.compose_parts_length
   simp [SubSystemPayload.compose, SubSystemSpec.compose,
         StructuralSpec.compose, List.length_append]
 
-/-- 合成後の name は `"{p₁.name}+{p₂.name}"` の形になる。
+/-- The composed name takes the form `"{p₁.name}+{p₂.name}"`.
 
-    `StructuralSpec.compose` の命名規約 (`s!"{s1.name}+{s2.name}"`) を
-    payload レベルに持ち上げた補題。 -/
+    Payload-level lift of the naming convention used by
+    `StructuralSpec.compose` (`s!"{s1.name}+{s2.name}"`). -/
 theorem SubSystemPayload.compose_name
     (p₁ p₂ : SubSystemPayload) :
     (p₁.compose p₂).spec.name =
       s!"{p₁.spec.name}+{p₂.spec.name}" := rfl
 
-/-- 単機リストの合成結果はその機そのもの。 -/
+/-- Composing a singleton list yields the single payload unchanged. -/
 theorem SubSystemPayload.composeMany_singleton (p : SubSystemPayload) :
     SubSystemPayload.composeMany [p] = some p := rfl
 
-/-- 空リストの合成結果は `none`。 -/
+/-- Composing the empty list yields `none`. -/
 theorem SubSystemPayload.composeMany_nil :
     SubSystemPayload.composeMany [] = none := rfl
 

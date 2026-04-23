@@ -3,28 +3,31 @@ import VerifiedMBSE.Matrix.Query
 /-!
 # Model Boundary: Explicit Declaration of What Is Not Verified
 
-形式検証はモデルの *内側* の性質を保証するに過ぎない。本モジュールはモデルの
-*外側* を第一級の対象として扱い、「V&V マトリクスが緑である」ことと
-「実システムが安全である」ことを混同しないようにする。
+Formal verification only guarantees properties on the *inside* of a
+model. This module treats the *outside* of the model as a first-class
+object so that "the V&V matrix is green" is not conflated with
+"the real system is safe".
 
-`ModelBoundary` は以下を記録する:
-- 形式的に検証された性質、
-- 証明ではなく試験・解析で裏付けられた性質、
-- 意図的にモデル化しない残留リスク（rationale と mitigation を含む）。
+A `ModelBoundary` records:
 
-意図は帳簿付けではなく epistemic honesty（認識論的誠実さ）にある。
-システムに変更が入った際は境界記述も見直すべきである。
+- properties verified formally,
+- properties supported by test or analysis rather than proof, and
+- residual risks deliberately left out of the model, each annotated
+  with a rationale and a mitigation.
 
-## F6 の変更点
+The intent is epistemic honesty, not bookkeeping. When the system
+changes, the boundary description should be revisited.
 
-旧実装では `ModelBoundary` が文字列 `systemName` と手動同期される
-`verifiedCount : Nat` を持つフラット構造体で、対象 `VMatrix` との型上の
-紐付けがなかった。本版では `ModelBoundary (vm : VMatrix)` として依存型化し、
-`verifiedCount` は `vm.totalRecords` からの関数に置き換わる。これにより
-他システム用の境界記述を誤って流用すると型エラーになる。
+## Dependency on `VMatrix`
 
-ファイルは VV から Matrix に移動した（VMatrix への依存のため）。
-namespace も `VerifiedMBSE.Matrix` に変更されている。
+`ModelBoundary` is parameterized by the `VMatrix` it describes:
+`ModelBoundary (vm : VMatrix)`. Accidentally reusing a boundary
+description for a different system therefore produces a type error.
+The `verifiedCount` field is not stored but derived as a function of
+`vm.totalRecords`, so it cannot drift out of sync with the matrix.
+
+Because of the `VMatrix` dependency, this file lives in the `Matrix`
+namespace rather than `VV`.
 -/
 
 namespace VerifiedMBSE.Matrix
@@ -33,23 +36,24 @@ namespace VerifiedMBSE.Matrix
 -- §1  Risk Categories
 -- ============================================================
 
-/-- 未モデル化リスクのカテゴリ。 -/
+/-- Category of an unmodeled risk. -/
 inductive RiskCategory where
-  /-- 形式モデルの外側にある物理現象（宇宙線 SEU、微小隕石衝突、材料疲労等）。 -/
+  /-- Physical phenomena outside the formal model (single-event upsets
+      from cosmic rays, micrometeoroid impact, material fatigue, ...). -/
   | physical
-  /-- 環境要因（太陽活動、熱極値、放射線）。 -/
+  /-- Environmental factors (solar activity, thermal extremes, radiation). -/
   | environmental
-  /-- ヒューマンファクタ（運用者エラー、手順誤用、訓練不足）。 -/
+  /-- Human factors (operator error, procedure misuse, inadequate training). -/
   | human
-  /-- 検証境界の外側にあるソフトウェアリスク（COTS、ファームウェア、OS）。 -/
+  /-- Software risks outside the verification boundary (COTS, firmware, OS). -/
   | software
-  /-- ハードウェアリスク（製造不良、経年劣化、部品差替え）。 -/
+  /-- Hardware risks (manufacturing defects, aging, part substitution). -/
   | hardware
-  /-- 組織・プロセスリスク（変更管理、サプライチェーン）。 -/
+  /-- Organizational and process risks (change management, supply chain). -/
   | organizational
   deriving Repr, BEq, DecidableEq
 
-/-- 人間可読のカテゴリ名。 -/
+/-- Human-readable category name. -/
 def RiskCategory.toString : RiskCategory → String
   | .physical       => "Physical"
   | .environmental  => "Environmental"
@@ -64,18 +68,19 @@ instance : ToString RiskCategory := ⟨RiskCategory.toString⟩
 -- §2  Evidence Kinds
 -- ============================================================
 
-/-- 性質を裏付ける根拠の強さ。証明と試験・解析を区別し、
-    `ModelBoundary` がその差を隠さないようにする。 -/
+/-- Strength of the evidence supporting a property. Distinguishes proof
+    from test and analysis so that `ModelBoundary` does not hide the
+    difference. -/
 inductive EvidenceKind where
-  /-- Lean での形式証明。 -/
+  /-- Formal proof in Lean. -/
   | verified
-  /-- 試験キャンペーン（ユニット試験、HIL、認定試験）による裏付け。 -/
+  /-- Supported by a test campaign (unit test, HIL, qualification). -/
   | tested
-  /-- 解析手法（FMEA、FTA、Monte Carlo）による裏付け。 -/
+  /-- Supported by an analysis method (FMEA, FTA, Monte Carlo). -/
   | analyzed
   deriving Repr, BEq, DecidableEq
 
-/-- 人間可読の種別名。 -/
+/-- Human-readable evidence-kind name. -/
 def EvidenceKind.toString : EvidenceKind → String
   | .verified => "Verified"
   | .tested   => "Tested"
@@ -87,16 +92,17 @@ instance : ToString EvidenceKind := ⟨EvidenceKind.toString⟩
 -- §3  Unmodeled Risk
 -- ============================================================
 
-/-- UnmodeledRisk: 形式モデルがカバーしないリスク。rationale と mitigation を
-    明示的に要求することで、エンジニアにそのギャップを命名・正当化させる。 -/
+/-- A risk the formal model does not cover. Requires an explicit
+    rationale and mitigation so the engineer is forced to name and
+    justify the gap. -/
 structure UnmodeledRisk where
-  /-- リスクの短い説明。 -/
+  /-- Short description of the risk. -/
   description : String
-  /-- リスクのカテゴリ。 -/
+  /-- Category of the risk. -/
   category : RiskCategory
-  /-- なぜこのリスクを形式化しないかの根拠。 -/
+  /-- Rationale for leaving this risk out of the formal model. -/
   rationale : String
-  /-- 非形式の緩和策（プロセス、試験、冗長化、運用制約）。 -/
+  /-- Non-formal mitigation (process, test, redundancy, operational constraint). -/
   mitigation : String
   deriving Repr
 
@@ -104,13 +110,13 @@ structure UnmodeledRisk where
 -- §4  Non-Verified Property
 -- ============================================================
 
-/-- NonFormalProperty: 試験・解析で裏付けられているが証明されていない性質。 -/
+/-- A property supported by test or analysis but not proved formally. -/
 structure NonFormalProperty where
-  /-- 性質の説明。 -/
+  /-- Description of the property. -/
   description : String
-  /-- 非形式根拠の種別（`.tested` または `.analyzed`）。 -/
+  /-- Kind of non-formal evidence (`.tested` or `.analyzed`). -/
   kind : EvidenceKind
-  /-- 根拠ソースの参照（報告書 ID、試験キャンペーン名など）。 -/
+  /-- Reference to the supporting source (report ID, test campaign name, ...). -/
   source : String
   deriving Repr
 
@@ -118,37 +124,41 @@ structure NonFormalProperty where
 -- §5  Model Boundary (Dependently Typed on VMatrix)
 -- ============================================================
 
-/-- ModelBoundary: モデルがカバーする範囲と外側のリスクを合わせた全体像。
+/-- Composite view of what the model covers together with the risks
+    outside it.
 
-    対象 VMatrix を型パラメータとして持つことで、他システム用の境界記述を
-    誤って流用すると型エラーになる（F6）。`verifiedCount` は関数として
-    `vm.totalRecords` から導出されるため、手動同期は不要。 -/
+    Parameterizing by the target `VMatrix` ties the boundary to a
+    specific matrix: accidentally reusing a boundary description for a
+    different system produces a type error. `verifiedCount` is derived
+    from `vm.totalRecords` as a function rather than stored, so it
+    cannot drift out of sync. -/
 structure ModelBoundary (vm : VMatrix) where
-  /-- この境界の識別子（典型的にはシステム名）。 -/
+  /-- Identifier of this boundary (typically the system name). -/
   systemName : String
-  /-- 試験・解析で裏付けられているが証明されていない性質。 -/
+  /-- Properties supported by test or analysis but not proved. -/
   nonFormal : List NonFormalProperty
-  /-- 意図的に形式化しないリスク。 -/
+  /-- Risks deliberately left out of the formal model. -/
   unmodeled : List UnmodeledRisk
   deriving Repr
 
-/-- 形式的に検証された性質の数。対象 VMatrix の全レコード数から自動導出される。 -/
+/-- Number of formally verified properties, derived from the total
+    record count of the target `VMatrix`. -/
 def ModelBoundary.verifiedCount {vm : VMatrix} (_ : ModelBoundary vm) : Nat :=
   vm.totalRecords
 
-/-- 未モデル化リスクの件数。 -/
+/-- Number of unmodeled risks. -/
 def ModelBoundary.unmodeledCount {vm : VMatrix} (mb : ModelBoundary vm) : Nat :=
   mb.unmodeled.length
 
-/-- 非形式性質の件数。 -/
+/-- Number of non-formal properties. -/
 def ModelBoundary.nonFormalCount {vm : VMatrix} (mb : ModelBoundary vm) : Nat :=
   mb.nonFormal.length
 
-/-- 追跡している項目の総数（verified + non-formal + unmodeled）。 -/
+/-- Total number of tracked items (verified + non-formal + unmodeled). -/
 def ModelBoundary.totalItems {vm : VMatrix} (mb : ModelBoundary vm) : Nat :=
   mb.verifiedCount + mb.nonFormalCount + mb.unmodeledCount
 
-/-- 未モデル化リスクをカテゴリで絞り込む。 -/
+/-- Filter unmodeled risks by category. -/
 def ModelBoundary.risksInCategory {vm : VMatrix}
     (mb : ModelBoundary vm) (cat : RiskCategory) : List UnmodeledRisk :=
   mb.unmodeled.filter (fun r => r.category == cat)
@@ -157,7 +167,7 @@ def ModelBoundary.risksInCategory {vm : VMatrix}
 -- §6  Summary
 -- ============================================================
 
-/-- ModelBoundary を人間可読な要約文字列にレンダリングする。 -/
+/-- Render a `ModelBoundary` as a human-readable summary string. -/
 def ModelBoundary.summary {vm : VMatrix} (mb : ModelBoundary vm) : String :=
   let header := s!"Model Boundary: {mb.systemName}"
   let verified := s!"  Verified (formal proof): {mb.verifiedCount}"

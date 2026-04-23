@@ -4,30 +4,38 @@ import VerifiedMBSE.Behavior.KripkeStructure
 /-!
 # StateMachine → KripkeStructure via ToKripke
 
-`StateMachine S D inv` に対する `ToKripke` instance を提供する。
-これにより `Always sm P` 等の呼び出しが型クラス resolution 経由で透過的に解決される。
+Provides a `ToKripke` instance for `StateMachine S D inv`, letting
+calls like `Always sm P` be resolved transparently through type-class
+resolution.
 
-## Coe からの移行理由
+## `ToKripke` instance rather than `Coe`
 
-`Coe (StateMachine S D inv) (KripkeStructure S D)` instance は、`inv` が α 側のみに
-現れるため Lean 4.30 の strict semi-out-params チェックに引っかかる (β = KripkeStructure S D
-から `inv` が flow できない)。
+A `Coe (StateMachine S D inv) (KripkeStructure S D)` instance fails
+Lean 4.30's strict semi-out-params check because `inv` appears in the
+source type but cannot flow from the target `KripkeStructure S D`.
 
-`ToKripke` 型クラスは `State` / `Data` のみ `outParam` とし、`α = StateMachine S D inv`
-全体に対する instance matching を行うため、`inv` も含めて自然に解決される。
+The `ToKripke` type class marks only `State` and `Data` as `outParam`,
+so instance matching on the full shape `α = StateMachine S D inv`
+resolves naturally and picks up `inv` along the way.
 
-## B-8 での拡張
+## Filling the `KripkeStructure` fields
 
-`KripkeStructure` が `inv` / `step` / `reachable_inv` / `step_preserves_reachable` を
-持つようになったため、`StateMachine.toKripke` もこれらを埋める必要がある:
+`KripkeStructure` exposes `inv`, `step`, `reachable_inv`, and
+`step_preserves_reachable`, and `StateMachine.toKripke` populates all
+four:
 
-- `inv` = StateMachine の型引数 `inv : S → D → Prop` をそのまま代入 (defeq 成立)
-- `reachable_inv` = 既存の `Reachable.inv_holds` の薄いラッパー
-- `step` = transition を存在量化した 1 ステップ関係
-- `step_preserves_reachable` = `Reachable.step` コンストラクタを呼ぶだけ
+- `inv` — the `inv : S → D → Prop` parameter of `StateMachine`,
+  passed through directly so `(sm.toKripke).inv = inv` holds
+  definitionally.
+- `reachable_inv` — a thin wrapper around `Reachable.inv_holds`.
+- `step` — existentially quantified one-step relation over
+  `sm.transitions`.
+- `step_preserves_reachable` — discharged by the `Reachable.step`
+  constructor.
 
-`abbrev` のまま維持することで `(sm.toKripke).inv = inv` /
-`(sm.toKripke).reachable s d = Reachable sm s d` の defeq が保たれる。
+Keeping the definition as `abbrev` preserves the definitional
+equalities `(sm.toKripke).inv = inv` and
+`(sm.toKripke).reachable s d = Reachable sm s d`.
 -/
 
 namespace VerifiedMBSE.Behavior
@@ -36,23 +44,27 @@ namespace VerifiedMBSE.Behavior
 -- §1  StateMachine.toKripke
 -- ============================================================
 
-/-- StateMachine を KripkeStructure として見る。
+/-- View a `StateMachine` as a `KripkeStructure`.
 
-    `abbrev` なので reducible で、以下の defeq 関係が成立する:
-    - `(sm.toKripke).inv` = `inv` (型引数そのもの)
-    - `(sm.toKripke).reachable s d` = `Reachable sm s d`
-    - `(sm.toKripke).step s d s' d'` = 遷移の存在量化
+    Defined as `abbrev` so elaboration is reducible and the following
+    definitional equalities hold:
 
-    ### step の定義
+    - `(sm.toKripke).inv = inv` (the type parameter itself)
+    - `(sm.toKripke).reachable s d = Reachable sm s d`
+    - `(sm.toKripke).step s d s' d'` unfolds to the existential over
+      `sm.transitions`
 
-    `step s d s' d'` は「ある遷移 `t ∈ sm.transitions` が存在して、
-    `t.source = s` かつ `t.guard d` が成立し、`t.target = s'` かつ
-    `t.effect d = d'` となる」ことを表す。
+    ### `step` definition
 
-    ### step_preserves_reachable の証明
+    `step s d s' d'` holds when some transition `t ∈ sm.transitions`
+    satisfies `t.source = s`, `t.guard d`, `t.target = s'`, and
+    `t.effect d = d'`.
 
-    `step` の存在量化を展開すると、対応する `t` と各等式が手に入るので、
-    `Reachable.step` コンストラクタをそのまま適用できる。 -/
+    ### `step_preserves_reachable` proof
+
+    Unfolding the existential supplies the transition `t` together
+    with the required equalities; the `Reachable.step` constructor
+    then closes the goal directly. -/
 abbrev StateMachine.toKripke
     {S D : Type} {inv : S → D → Prop}
     (sm : StateMachine S D inv) : KripkeStructure S D :=
@@ -73,11 +85,11 @@ abbrev StateMachine.toKripke
 -- §2  ToKripke instance
 -- ============================================================
 
-/-- StateMachine に対する ToKripke instance。
+/-- `ToKripke` instance for `StateMachine`.
 
-    これにより `Always sm P` で sm : StateMachine S D inv が渡されると、
-    `ToKripke (StateMachine S D inv) S D` が resolve され、
-    `State = S, Data = D` が outParam で決定される。 -/
+    Calls such as `Always sm P` with `sm : StateMachine S D inv`
+    resolve `ToKripke (StateMachine S D inv) S D`, and `State = S` /
+    `Data = D` are determined via the `outParam` fields of the class. -/
 instance instToKripkeStateMachine
     {S D : Type} {inv : S → D → Prop} :
     ToKripke (StateMachine S D inv) S D where
@@ -87,7 +99,7 @@ instance instToKripkeStateMachine
 -- §3  WellFormed → NonEmpty
 -- ============================================================
 
-/-- `sm.WellFormed` から `sm.toKripke.NonEmpty` を導く。 -/
+/-- `sm.WellFormed` implies `sm.toKripke.NonEmpty`. -/
 theorem StateMachine.wellFormed_imp_nonEmpty
     {S D : Type} {inv : S → D → Prop}
     {sm : StateMachine S D inv}
@@ -96,7 +108,7 @@ theorem StateMachine.wellFormed_imp_nonEmpty
   obtain ⟨d₀, hd₀⟩ := hwf
   exact ⟨sm.initialState, d₀, Reachable.init d₀ hd₀⟩
 
-/-- ドット記法用のエイリアス: `hwf.nonEmpty`. -/
+/-- Dot-notation alias: `hwf.nonEmpty`. -/
 theorem StateMachine.WellFormed.nonEmpty
     {S D : Type} {inv : S → D → Prop}
     {sm : StateMachine S D inv}

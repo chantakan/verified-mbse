@@ -6,31 +6,34 @@ import VerifiedMBSE.Behavior.Product
 /-!
 # LTL over ProductKripke (Unified via ToKripke)
 
-B-4 以降、積 Kripke 構造上の LTL は `ToKripke` 型クラス経由で統一された
-`Always / Eventually / Leads` で書ける。本ファイルは以下を提供する:
+LTL over a product Kripke structure is expressed uniformly via the
+`ToKripke` type class with `Always` / `Eventually` / `Leads`. This
+module provides:
 
-1. **後方互換エイリアス** (§1): `Always_prod` / `Eventually_prod` / `Leads_prod` を
-   `abbrev` で新 API の別名として残す。既存コードは変更なしで動く。
+1. **Compatibility aliases** (§1): `Always_prod` / `Eventually_prod` /
+   `Leads_prod` as `abbrev`s over the uniform operators. Existing code
+   continues to compile unchanged.
 
-2. **持ち上げ補題** (§2-§4): 各要素 Kripke 構造の LTL 保証を積に持ち上げる補題
-   (`.of_and`, `.of_left`, `.of_right`)。
+2. **Lifting lemmas** (§2–§4): transport component-level LTL
+   guarantees to the product (`.of_and`, `.of_left`, `.of_right`).
 
-## B-8c での一般化
+## Type-class-based generality
 
-B-7 までは型引数が `{sm₁ : StateMachine S₁ D₁ inv₁}` / `{sm₂ : StateMachine S₂ D₂ inv₂}`
-の StateMachine 特化で、持ち上げに `sm_i.WellFormed` を要求していた。
+The operators and lemmas are parameterized over arbitrary
+`{α β : Type} {S₁ D₁ S₂ D₂ : Type} [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]`.
+Lifting takes an opposite-side `NonEmpty` witness rather than a
+`StateMachine`-specific `WellFormed`:
 
-B-8c では型引数を `{α β : Type} {S₁ D₁ S₂ D₂ : Type} [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]`
-に一般化し、持ち上げ引数は `(ToKripke.toKripke y).NonEmpty` / `(ToKripke.toKripke x).NonEmpty`
-に弱化した。これにより:
+- For `ProductKripke sm₁ sm₂` (equivalently,
+  `ProductStateMachine sm₁ sm₂`), pass `hwf₂.nonEmpty` on the right
+  and the original lemmas apply directly.
+- For nested compositions such as
+  `ProductKripke (pk : ProductKripke ...) sm₃`, pass
+  `pk.toKripke.NonEmpty` and the same lemmas are reused without
+  specialization.
 
-- `ProductKripke sm₁ sm₂`（= `ProductStateMachine sm₁ sm₂`）での使用は
-  `hwf₂.nonEmpty` を渡せばそのまま動作
-- `ProductKripke (pk : ProductKripke ...) sm₃`（3 機ネスト合成）でも、
-  `pk.toKripke.NonEmpty` を渡すだけで同じ補題を再利用できる
-
-StateMachine 特化の `Always_prod psm P` / `Eventually_prod psm P` / `Leads_prod psm P Q`
-は後方互換のため abbrev のシグネチャは維持され、呼び出し側は変更不要。
+The `Always_prod` / `Eventually_prod` / `Leads_prod` aliases retain
+their original signatures, so call sites need no changes.
 -/
 
 namespace VerifiedMBSE.Behavior
@@ -39,7 +42,8 @@ namespace VerifiedMBSE.Behavior
 -- §1  Compatibility Aliases
 -- ============================================================
 
-/-- 積 Kripke 構造上の Always (後方互換エイリアス)。`Always pk P` と defeq。 -/
+/-- `Always` over a product Kripke structure (compatibility alias).
+    `defeq` to `Always pk P`. -/
 abbrev Always_prod
     {α β : Type} {S₁ D₁ S₂ D₂ : Type}
     [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
@@ -48,7 +52,8 @@ abbrev Always_prod
     (P : S₁ × S₂ → D₁ × D₂ → Prop) : Prop :=
   Always pk P
 
-/-- 積 Kripke 構造上の Eventually (後方互換エイリアス)。`Eventually pk P` と defeq。 -/
+/-- `Eventually` over a product Kripke structure (compatibility alias).
+    `defeq` to `Eventually pk P`. -/
 abbrev Eventually_prod
     {α β : Type} {S₁ D₁ S₂ D₂ : Type}
     [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
@@ -57,7 +62,8 @@ abbrev Eventually_prod
     (P : S₁ × S₂ → D₁ × D₂ → Prop) : Prop :=
   Eventually pk P
 
-/-- 積 Kripke 構造上の Leads (後方互換エイリアス)。`Leads pk P Q` と defeq。 -/
+/-- `Leads` over a product Kripke structure (compatibility alias).
+    `defeq` to `Leads pk P Q`. -/
 abbrev Leads_prod
     {α β : Type} {S₁ D₁ S₂ D₂ : Type}
     [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
@@ -70,10 +76,12 @@ abbrev Leads_prod
 -- §2  Safety Lifting (Always)
 -- ============================================================
 
-/-- Always の積への持ち上げ: 各成分の Always から積の連言 Always を構築。
+/-- Lift `Always` to the product: component-level `Always` properties
+    combine into a conjunction `Always` on the product.
 
-    `hr.fst_reachable` / `hr.snd_reachable` は `ProductKripkeReachable` の補題。
-    要素側の `reachable` が induction hypothesis 経由で供給される。 -/
+    Component reachability is supplied by `hr.fst_reachable` /
+    `hr.snd_reachable`, the projection lemmas on
+    `ProductKripkeReachable`. -/
 theorem Always_prod.of_and
     {α β : Type} {S₁ D₁ S₂ D₂ : Type}
     [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
@@ -85,7 +93,8 @@ theorem Always_prod.of_and
   fun p d hr =>
     ⟨h₁ p.1 d.1 hr.fst_reachable, h₂ p.2 d.2 hr.snd_reachable⟩
 
-/-- Always の片側持ち上げ (左): x 側の Always から積の左成分 Always を得る。 -/
+/-- One-sided `Always` lifting (left): lift `x`'s `Always` to the
+    left component on the product. -/
 theorem Always_prod.of_left
     {α β : Type} {S₁ D₁ S₂ D₂ : Type}
     [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
@@ -96,7 +105,8 @@ theorem Always_prod.of_left
     Always pk (fun p d => P₁ p.1 d.1) :=
   fun p d hr => h₁ p.1 d.1 hr.fst_reachable
 
-/-- Always の片側持ち上げ (右): y 側の Always から積の右成分 Always を得る。 -/
+/-- One-sided `Always` lifting (right): lift `y`'s `Always` to the
+    right component on the product. -/
 theorem Always_prod.of_right
     {α β : Type} {S₁ D₁ S₂ D₂ : Type}
     [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
@@ -111,11 +121,13 @@ theorem Always_prod.of_right
 -- §3  Detection Lifting (Eventually)
 -- ============================================================
 
-/-- Eventually の片側持ち上げ (左): x 側の Eventually から積の左成分 Eventually を得る。
+/-- One-sided `Eventually` lifting (left): lift `x`'s `Eventually` to
+    the left component on the product.
 
-    相手側 (y) の `NonEmpty` で初期データを供給する必要がある。
-    `ProductKripkeReachable.fromLeft` が `init` コンストラクタ一発で
-    積到達可能状態を構成する。 -/
+    Requires a `NonEmpty` witness on the opposite side (`y`) to supply
+    the initial data on the right. `ProductKripkeReachable.fromLeft`
+    builds the product-reachable state with a single `init`
+    constructor. -/
 theorem Eventually_prod.of_left
     {α β : Type} {S₁ D₁ S₂ D₂ : Type}
     [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
@@ -129,7 +141,8 @@ theorem Eventually_prod.of_left
   obtain ⟨s₂, d₂, hp⟩ := ProductKripkeReachable.fromLeft hr₁ hne₂
   exact ⟨(s₁, s₂), (d₁, d₂), hp, hP⟩
 
-/-- Eventually の片側持ち上げ (右): y 側の Eventually から積の右成分 Eventually を得る。 -/
+/-- One-sided `Eventually` lifting (right): lift `y`'s `Eventually` to
+    the right component on the product. -/
 theorem Eventually_prod.of_right
     {α β : Type} {S₁ D₁ S₂ D₂ : Type}
     [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
@@ -147,8 +160,8 @@ theorem Eventually_prod.of_right
 -- §4  Recovery Lifting (Leads)
 -- ============================================================
 
-/-- Leads の片側持ち上げ (左): x 側の Leads P₁ Q₁ から、積上で
-    `P₁ ∘ fst ⇒ ◇ (Q₁ ∘ fst)` を得る。 -/
+/-- One-sided `Leads` lifting (left): from `x`'s `Leads P₁ Q₁`, derive
+    `P₁ ∘ fst ⇒ ◇ (Q₁ ∘ fst)` on the product. -/
 theorem Leads_prod.of_left
     {α β : Type} {S₁ D₁ S₂ D₂ : Type}
     [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]
@@ -163,8 +176,8 @@ theorem Leads_prod.of_left
   have hE : Eventually x Q₁ := h p.1 d.1 hr₁ hP
   exact Eventually_prod.of_left pk hne₂ hE
 
-/-- Leads の片側持ち上げ (右): y 側の Leads P₂ Q₂ から、積上で
-    `P₂ ∘ snd ⇒ ◇ (Q₂ ∘ snd)` を得る。 -/
+/-- One-sided `Leads` lifting (right): from `y`'s `Leads P₂ Q₂`, derive
+    `P₂ ∘ snd ⇒ ◇ (Q₂ ∘ snd)` on the product. -/
 theorem Leads_prod.of_right
     {α β : Type} {S₁ D₁ S₂ D₂ : Type}
     [ToKripke α S₁ D₁] [ToKripke β S₂ D₂]

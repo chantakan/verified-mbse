@@ -3,8 +3,9 @@ import VerifiedMBSE.VV.Layer
 /-!
 # ValidationEvidence: Confidence Levels as Types
 
-Confidence < Contract < Trusted の三層階層、昇格トレース、および V モデルの
-セルを統一的に表す `VVRecord` を定義する。
+Three-tier hierarchy `confidence < contract < trusted`, a promotion
+trace recording the history of upgrades, and `VVRecord`, a uniform
+representation of one cell of the V model.
 -/
 
 namespace VerifiedMBSE.VV
@@ -13,46 +14,51 @@ namespace VerifiedMBSE.VV
 -- §1  ValidationEvidence
 -- ============================================================
 
-/-- ValidationEvidence: 命題 P の検証根拠を表す型。
-    三層階層: confidence < contract < trusted。 -/
+/-- `ValidationEvidence P` — the verification evidence for a proposition
+    `P`, organized as a three-tier hierarchy
+    `confidence < contract < trusted`. -/
 inductive ValidationEvidence (P : Prop) : Type where
-  /-- Confidence: 確率的な根拠（初期設計、専門家ヒューリスティクス）。 -/
+  /-- Confidence: probabilistic evidence (early design, expert heuristics). -/
   | confidence : Float → ValidationEvidence P
-  /-- Contract: 条件付き保証（試験・シミュレーション後）。 -/
+  /-- Contract: conditional guarantee (after test or simulation). -/
   | contract : (assumption : Prop) → (assumption → P) → ValidationEvidence P
-  /-- Trusted: 公理として採用（ハードウェア試験、承認済み）。 -/
+  /-- Trusted: adopted as an axiom (hardware test, approved). -/
   | trusted : P → ValidationEvidence P
 
-/-- 根拠の信頼度を数値で返す（表示・ソート用）。
+/-- Confidence value of an evidence, as a `Float` (for display or
+    sorting).
 
-    注意: この Float を使った比較は丸め誤差の観点で推奨されない。
-    「trusted かどうか」の判定には `isTrusted` を使うこと（F2 参照）。 -/
+    This `Float` result is not suitable for equality comparisons due to
+    rounding. For a "is this trusted?" check, use `isTrusted`, which is
+    structural on the constructor. -/
 def ValidationEvidence.confidenceLevel {P : Prop} :
     ValidationEvidence P → Float
   | .confidence p => p
   | .contract _ _ => 0.95
   | .trusted _    => 1.0
 
-/-- ValidationEvidence が `.trusted` 構造子であるかを判定する。
-    Float 等号を介さない構造的判別で、`fullyTrusted` 等の Bool 計算で用いる。 -/
+/-- Whether the evidence was built with the `.trusted` constructor.
+
+    Structural discrimination that avoids `Float` equality; consumed by
+    boolean checks such as `fullyTrusted`. -/
 def ValidationEvidence.isTrusted {P : Prop} :
     ValidationEvidence P → Bool
   | .trusted _ => true
   | _          => false
 
-/-- ValidationEvidence が `.contract` 構造子であるかを判定する。 -/
+/-- Whether the evidence was built with the `.contract` constructor. -/
 def ValidationEvidence.isContract {P : Prop} :
     ValidationEvidence P → Bool
   | .contract _ _ => true
   | _             => false
 
-/-- ValidationEvidence が `.confidence` 構造子であるかを判定する。 -/
+/-- Whether the evidence was built with the `.confidence` constructor. -/
 def ValidationEvidence.isConfidence {P : Prop} :
     ValidationEvidence P → Bool
   | .confidence _ => true
   | _             => false
 
-/-- 昇格: Confidence → Contract。 -/
+/-- Promotion: `Confidence → Contract`. -/
 def ValidationEvidence.promoteToContract {P : Prop}
     (_ : ValidationEvidence P)
     (a : Prop)
@@ -60,7 +66,8 @@ def ValidationEvidence.promoteToContract {P : Prop}
     ValidationEvidence P :=
   .contract a ev
 
-/-- 昇格: Contract → Trusted（仮定が実際に成立する場合）。 -/
+/-- Promotion: `Contract → Trusted`, given a proof that the assumption
+    of the contract actually holds. -/
 def ValidationEvidence.promoteToTrusted {P : Prop}
     (c : ValidationEvidence P)
     (h : match c with
@@ -76,18 +83,22 @@ def ValidationEvidence.promoteToTrusted {P : Prop}
 -- §2  ValidationTrace
 -- ============================================================
 
-/-- ValidationTrace: 昇格履歴を保持するレコード。 -/
+/-- `ValidationTrace P` — record of the promotion history together with
+    the current evidence for `P`. -/
 structure ValidationTrace (P : Prop) where
   history : List (ValidationEvidence P)
   current : ValidationEvidence P
 
-/-- ValidationTrace の初期化。 -/
+/-- Initialize a `ValidationTrace` with a single piece of evidence and
+    an empty history. -/
 def ValidationTrace.init {P : Prop}
     (ev : ValidationEvidence P) :
     ValidationTrace P :=
   { history := [], current := ev }
 
-/-- ValidationTrace に昇格を記録する。 -/
+/-- Record a promotion step in the trace. The previous `current`
+    evidence is appended to `history`, and `next` becomes the new
+    `current`. -/
 def ValidationTrace.promote {P : Prop}
     (t : ValidationTrace P)
     (next : ValidationEvidence P) :
@@ -95,17 +106,17 @@ def ValidationTrace.promote {P : Prop}
   { history := t.history ++ [t.current]
     current := next }
 
-/-- 現時点の信頼度を取得する。 -/
+/-- Current confidence value of the trace. -/
 def ValidationTrace.currentLevel {P : Prop}
     (t : ValidationTrace P) : Float :=
   t.current.confidenceLevel
 
-/-- 現時点の根拠が `.trusted` かを判定する（構造子一致）。 -/
+/-- Whether the current evidence is `.trusted` (constructor match). -/
 def ValidationTrace.isTrusted {P : Prop}
     (t : ValidationTrace P) : Bool :=
   t.current.isTrusted
 
-/-- trace が昇格済みかを判定する。 -/
+/-- Whether the trace has undergone at least one promotion. -/
 def ValidationTrace.hasBeenPromoted {P : Prop}
     (t : ValidationTrace P) : Bool :=
   !t.history.isEmpty
@@ -114,7 +125,7 @@ def ValidationTrace.hasBeenPromoted {P : Prop}
 -- §3  VVRecord
 -- ============================================================
 
-/-- VVRecord: 単一の設計項目に対する完全な V&V レコード。 -/
+/-- Complete V&V record for a single design item. -/
 structure VVRecord where
   layer        : Layer
   spec_name    : String
@@ -126,12 +137,14 @@ structure VVRecord where
 -- §4  IOValidationSource
 -- ============================================================
 
-/-- IOValidationSource: IO から得られた検証根拠。 -/
+/-- Validation evidence obtained from IO (e.g. test reports, external
+    certifications). -/
 structure IOValidationSource (P : Prop) where
   source_description : String
   declaration : P
 
-/-- IO 由来の Trusted ValidationEvidence を構築する。 -/
+/-- Construct a `.trusted` `ValidationEvidence` from an
+    `IOValidationSource`. -/
 def fromIOValidation {P : Prop}
     (src : IOValidationSource P) :
     ValidationEvidence P :=
@@ -141,27 +154,27 @@ def fromIOValidation {P : Prop}
 -- §5  Basic Theorems
 -- ============================================================
 
-/-- trusted の confidenceLevel は 1.0。 -/
+/-- `.trusted` evidence has a confidence level of `1.0`. -/
 theorem trusted_is_full_confidence {P : Prop} (h : P) :
     (ValidationEvidence.trusted h).confidenceLevel = 1.0 := by
   simp [ValidationEvidence.confidenceLevel]
 
-/-- trusted は isTrusted を true にする。 -/
+/-- `.trusted` evidence satisfies `isTrusted`. -/
 theorem trusted_isTrusted {P : Prop} (h : P) :
     (ValidationEvidence.trusted h).isTrusted = true := by
   simp [ValidationEvidence.isTrusted]
 
-/-- confidence は isTrusted を true にしない。 -/
+/-- `.confidence` evidence does not satisfy `isTrusted`. -/
 theorem confidence_not_isTrusted {P : Prop} (p : Float) :
     (ValidationEvidence.confidence p : ValidationEvidence P).isTrusted = false := by
   simp [ValidationEvidence.isTrusted]
 
-/-- contract は isTrusted を true にしない。 -/
+/-- `.contract` evidence does not satisfy `isTrusted`. -/
 theorem contract_not_isTrusted {P : Prop} (a : Prop) (ev : a → P) :
     (ValidationEvidence.contract a ev).isTrusted = false := by
   simp [ValidationEvidence.isTrusted]
 
-/-- promote は履歴を 1 つ増やす。 -/
+/-- `promote` extends the history by exactly one entry. -/
 theorem promote_extends_history {P : Prop}
     (t : ValidationTrace P) (next : ValidationEvidence P) :
     (t.promote next).history.length = t.history.length + 1 := by

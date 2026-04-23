@@ -3,21 +3,25 @@ import VerifiedMBSE.Behavior.KripkeStructure
 /-!
 # LTL Temporal Operators via ToKripke Type Class
 
-Always (□), Eventually (◇), Leads (⇒◇) を `ToKripke` 型クラス経由で定義する。
-これにより `Always sm P` / `Always psm P` / `Always ct P` のような呼び出しを
-StateMachine・積状態機械・連続時間系などに対して同一 API で提供できる。
+Defines `Always` (□), `Eventually` (◇), and `Leads` (⇒◇) through the
+`ToKripke` type class, so that `Always sm P`, `Always psm P`, and
+`Always ct P` share a single API across `StateMachine`,
+product state machines, and continuous-time systems.
 
-## ToKripke 経由の dispatch
+## Dispatch via `ToKripke`
 
-`Always x P` で `x : α` を渡すと、`ToKripke α State Data` instance が解決され、
-`State` / `Data` が `outParam` として決定される。`P : State → Data → Prop` の
-形で明示的に elaborate されるため、`fun s d => Q s d` のような lambda の
-domain 型が確定し、後続の `omega` や `simp` などが誤動作しない。
+When `Always x P` receives `x : α`, the `ToKripke α State Data`
+instance is resolved and `State` / `Data` are determined via
+`outParam`. The predicate `P : State → Data → Prop` is elaborated
+with its domain pinned down, so lambdas such as `fun s d => Q s d`
+have definite domain types and subsequent tactics like `omega` or
+`simp` operate without ambiguity.
 
-## Next と Until について
+## `Next` and `Until`
 
-Next (◯) と Until (P U Q) は具体的な遷移構造 (transitions リスト) に依存する
-ため、`KripkeStructure` には含めず `StateMachineLTL.lean` に分離する。
+`Next` (◯) and `Until` (P U Q) depend on the explicit transition
+structure of `StateMachine` and do not fit the `KripkeStructure`
+abstraction. They live in `StateMachineLTL.lean`.
 -/
 
 namespace VerifiedMBSE.Behavior
@@ -26,20 +30,21 @@ namespace VerifiedMBSE.Behavior
 -- §1  Basic Temporal Operators
 -- ============================================================
 
-/-- Always (□ P): 全ての到達可能な `(s, d)` で `P s d` が成立する。
+/-- `Always (□ P)`: `P s d` holds at every reachable `(s, d)`.
 
-    `abbrev` かつ型クラス経由のため、`intro s d hr` した際に goal の lambda
-    が自動で β 還元される。 -/
+    Defined as `abbrev` via the type class so that after `intro s d hr`
+    the goal lambda β-reduces automatically. -/
 abbrev Always {α : Type} {State Data : Type} [ToKripke α State Data]
     (x : α) (P : State → Data → Prop) : Prop :=
   ∀ s d, (ToKripke.toKripke x).reachable s d → P s d
 
-/-- Eventually (◇ P): `P s d` が成立する到達可能な `(s, d)` が存在する。 -/
+/-- `Eventually (◇ P)`: some reachable `(s, d)` satisfies `P s d`. -/
 abbrev Eventually {α : Type} {State Data : Type} [ToKripke α State Data]
     (x : α) (P : State → Data → Prop) : Prop :=
   ∃ s d, (ToKripke.toKripke x).reachable s d ∧ P s d
 
-/-- Leads (P ⇒ ◇ Q): 弱い意味論 (到達可能な P 位置から、到達可能な Q 位置が存在)。 -/
+/-- `Leads (P ⇒ ◇ Q)`: the weak semantics — at every reachable state
+    satisfying `P`, a reachable state satisfying `Q` exists. -/
 abbrev Leads {α : Type} {State Data : Type} [ToKripke α State Data]
     (x : α) (P Q : State → Data → Prop) : Prop :=
   Always x (fun s d => P s d → Eventually x Q)
@@ -48,14 +53,14 @@ abbrev Leads {α : Type} {State Data : Type} [ToKripke α State Data]
 -- §2  Basic Algebraic Laws
 -- ============================================================
 
-/-- □ P ∧ □ Q → □(P ∧ Q). -/
+/-- `□ P ∧ □ Q → □(P ∧ Q)`. -/
 theorem always_and {α : Type} {State Data : Type} [ToKripke α State Data]
     {x : α} {P Q : State → Data → Prop}
     (hP : Always x P) (hQ : Always x Q) :
     Always x (fun s d => P s d ∧ Q s d) :=
   fun s d hr => ⟨hP s d hr, hQ s d hr⟩
 
-/-- NonEmpty + □ P → ◇ P. -/
+/-- `NonEmpty` together with `□ P` implies `◇ P`. -/
 theorem always_implies_eventually {α : Type} {State Data : Type}
     [ToKripke α State Data]
     {x : α} {P : State → Data → Prop}
@@ -64,7 +69,7 @@ theorem always_implies_eventually {α : Type} {State Data : Type}
   obtain ⟨s, d, hr⟩ := hne
   exact ⟨s, d, hr, h s d hr⟩
 
-/-- Leads P P: 自己反射性。 -/
+/-- `Leads P P`: reflexivity of `Leads`. -/
 theorem always_leads {α : Type} {State Data : Type} [ToKripke α State Data]
     {x : α} {P : State → Data → Prop} :
     Leads x P P :=

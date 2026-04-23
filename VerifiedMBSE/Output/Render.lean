@@ -39,10 +39,8 @@ def multiplicityStr (lower upper : Nat) : String :=
   else if upper == 0 then s!"[{lower}..*]"
   else s!"[{lower}..{upper}]"
 
-/-- Convert a Layer to a full string representation.
-
-    F5 で Layer が 8 階層に拡張されたため、全 constructor に対して
-    ECSS-E-ST-10C 準拠の文字列を割り当てる。 -/
+/-- Convert a `Layer` to its full lowercase string, following
+    ECSS-E-ST-10C naming for all eight constructors. -/
 def layerToString (l : VerifiedMBSE.VV.Layer) : String :=
   match l with
   | .mission   => "mission"
